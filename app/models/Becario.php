@@ -1,0 +1,69 @@
+<?php
+
+class Becario
+{
+    // Propiedad para la conexión a la base de datos
+    private $pdo;
+
+    // El constructor recibe la conexión PDO
+    public function __construct($pdo)
+    {
+        $this->pdo = $pdo;
+    }
+
+    /**
+     * Busca un becario en la base de datos por su número de cédula.
+     * @param string $cedula La cédula a buscar.
+     * @return array|null Un array asociativo con los datos del becario o null si no se encuentra.
+     */
+    public function buscarPorCedula($cedula)
+    {
+        try {
+            $stmt = $this->pdo->prepare("SELECT * FROM usuarios WHERE cedula = ?");
+            $stmt->execute([$cedula]);
+            return $stmt->fetch(); // Retorna los datos como un array asociativo o false si no hay resultados
+        } catch (PDOException $e) {
+            // Manejo de errores: registra el error pero no lo muestra al usuario
+            error_log("Error al buscar becario por cédula: " . $e->getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Actualiza la ciudad y provincia del becario y obtiene toda la información necesaria.
+     * @param string $cedula La cédula del becario.
+     * @param string $ciudad La nueva ciudad.
+     * @param string $provincia La nueva provincia.
+     * @return array|null Un array con todos los datos del becario y los enlaces o null si no se encuentra.
+     */
+    public function procesarRegistro($cedula, $ciudad, $provincia)
+    {
+        try {
+            // Iniciar una transacción para asegurar que todas las operaciones se completen o ninguna lo haga
+            $this->pdo->beginTransaction();
+
+            // Actualiza ciudad y provincia
+            $stmt = $this->pdo->prepare("UPDATE usuarios SET ciudad = ?, provincia = ? WHERE cedula = ?");
+            $stmt->execute([$ciudad, $provincia, $cedula]);
+
+            // Obtener los links y la info adicional en una sola consulta
+            $stmt = $this->pdo->prepare("
+            SELECT u.*, lw.enlace as whatsapp_link, lm.enlace as moodle_link
+            FROM usuarios u
+            LEFT JOIN links_whatsapp lw ON u.link_whatsapp_id = lw.id
+            LEFT JOIN links_moodle lm ON u.link_moodle_id = lm.id
+            WHERE u.cedula = ?
+        ");
+            $stmt->execute([$cedula]);
+            $usuario = $stmt->fetch();
+
+            $this->pdo->commit(); // Confirmar la transacción
+
+            return $usuario;
+        } catch (PDOException $e) {
+            $this->pdo->rollBack(); // Revertir los cambios si ocurre un error
+            error_log("Error al procesar el registro del becario: " . $e->getMessage());
+            return null;
+        }
+    }
+}

@@ -1,0 +1,280 @@
+html, body {
+    height: 100%;
+    margin: 0;
+}
+/* Estilos globales y para el body */
+body {
+    font-family: 'Inter', Arial, sans-serif;
+    background-image: url('/assets/fondos2/FORMATOS BECA SENESCYT_Mesa de trabajo 1.jpg');
+    background-size: cover;
+    background-attachment: fixed;
+    background-repeat: no-repeat;
+    background-position: center;
+    color: #000;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh; /* Asegura que el body tenga toda la altura */
+    font-family: 'Inter', sans-serif;
+}
+
+main {
+    flex: 1;
+}
+
+/* Estilos para títulos */
+h1, h3 {
+    color: black;
+    text-align: center;
+    margin: 20px 10px 0;
+}
+
+h2 {
+    color: #005D52; /* Color principal para subtítulos */
+    text-align: center;
+    margin-top: 20px;
+    margin-bottom: 20px; /* Asegura un margen inferior consistente */
+}
+
+/* Estilos para párrafos */
+p {
+    font-size: 1.1em;
+    line-height: 1.6;
+    color: #000;
+    margin: 15px 0; /* Asegura un margen vertical consistente para los párrafos */
+}
+
+/* Estilos para el contenedor principal de contenido */
+.container {
+    background-color: rgba(255, 255, 255, 0.95); /* Fondo blanco semitransparente */
+    padding: 30px 20px; /* Un poco más de padding para todas las páginas con .container */
+    border-radius: 15px; /* Bordes más redondeados */
+    max-width: 700px; /* Ancho máximo para el contenido */
+    width: 90%; /* Ancho responsivo */
+    text-align: center; /* Centra el texto dentro del contenedor */
+    color: #000; /* Color de texto dentro del contenedor */
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3); /* Sombra más pronunciada */
+    margin: 20px auto; /* Centra el contenedor horizontalmente y le da margen vertical */
+}
+
+/* Estilos para formularios */
+form {
+    display: flex;
+    flex-direction: column;
+    gap: 15px; /* Espaciado entre elementos del formulario */
+}
+
+label {
+    font-weight: bold;
+    color: #000;
+    text-align: left; /* Alinea las etiquetas a la izquierda */
+    margin-bottom: 5px; /* Pequeño margen debajo de las etiquetas */
+}
+
+input[type="text"],
+input[type="email"],
+select {
+    width: 100%;
+    padding: 10px;
+    border-radius: 5px;
+    border: 1px solid #ccc;
+    box-sizing: border-box; /* Incluye padding y border en el ancho total */
+}
+
+/* Estilos para botones de envío */
+input[type="submit"] {
+    background-color: #ffcc00; /* Color de fondo amarillo/naranja */
+    color: #000;
+    padding: 10px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: background-color 0.3s ease, transform 0.3s ease; /* Transición para efectos hover */
+}
+
+input[type="submit"]:hover {
+    background-color: #e6b800; /* Color de fondo al pasar el ratón */
+    transform: translateY(-2px); /* Pequeño levantamiento al pasar el ratón */
+}
+
+/* Estilos para enlaces generales */
+a {
+    color: #005D52; /* Color principal para enlaces */
+    text-decoration: none;
+    font-weight: bold;
+    display: inline-block; /* Permite aplicar transformaciones y padding a los enlaces */
+    transition: transform 0.3s ease, color 0.3s ease; /* Transición para efectos hover */
+}
+
+a:hover {
+    text-decoration: underline;
+    transform: scale(1.05); /* Pequeña escala al pasar el ratón */
+}
+
+/* Estilo específico para los elementos <strong> (negrita) */
+strong {
+    color: #000; /* Asegura que el texto en negrita sea negro */
+}
+
+/* Clase 'boton' para enlaces con apariencia de botón (usada en registro_exitoso.php) */
+.boton {
+    display: inline-flex; /* Usar flex para centrar contenido e iconos */
+    align-items: center; /* Centra verticalmente los elementos dentro del botón */
+    justify-content: center; /* Centra horizontalmente los elementos dentro del botón */
+    padding: 12px 25px; /* Más padding para que los botones sean más grandes */
+    font-size: 1.1em; /* Un poco más grande para mejor visibilidad */
+    color: white;
+    background-color: #005D52; /* Color de fondo principal para botones */
+    text-decoration: none;
+    border-radius: 8px; /* Bordes más redondeados para los botones */
+    text-align: center;
+    box-shadow: 0 4px 6px rgba(0, 93, 82, 0.2); /* Sombra para profundidad */
+    transition: background-color 0.3s ease, transform 0.3s ease, box-shadow 0.3s ease; /* Transiciones suaves */
+}
+
+.boton:hover {
+    background-color: #004a40; /* Tono más oscuro al pasar el ratón */
+    transform: translateY(-3px) scale(1.02); /* Efecto de levantamiento y ligera escala */
+    box-shadow: 0 6px 10px rgba(0, 93, 82, 0.3); /* Sombra más pronunciada al pasar el ratón */
+    text-decoration: none; /* Asegura que no haya subrayado en hover */
+}
+
+.boton i {
+    margin-right: 8px; /* Espacio entre el icono y el texto del botón */
+    font-size: 1.2em; /* Tamaño del icono */
+}
+
+
+/* Estilos del Modal */
+.modal {
+    display: none; /* Oculto por defecto */
+    position: fixed; /* Fijo en la ventana */
+    z-index: 1000; /* Asegura que esté por encima de otros elementos */
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: auto; /* Permite scroll si el contenido es muy largo */
+    background-color: rgba(0, 0, 0, 0.7); /* Fondo oscuro semitransparente */
+    display: flex; /* Usamos flex para centrar el modal */
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-content {
+    background-color: #fff;
+    padding: 20px;
+    border-radius: 10px;
+    width: 90%;
+    max-width: 500px;
+    color: #000;
+    position: relative; /* Para posicionar el botón de cerrar */
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3); /* Sombra más definida */
+    animation: fadeInScale 0.3s ease-out; /* Animación de entrada */
+}
+
+.close {
+    color: #aaa;
+    position: absolute;
+    top: 10px;
+    right: 15px;
+    font-size: 28px; /* Un poco más grande para ser más fácil de presionar */
+    cursor: pointer;
+    transition: color 0.3s ease;
+}
+
+.close:hover {
+    color: #777;
+}
+
+/* Animación para el modal */
+@keyframes fadeInScale {
+    from {
+        opacity: 0;
+        transform: scale(0.9);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+/* Footer styles */
+.footer-container {
+    width: 100%;
+    padding: 15px 0;
+    margin-top: auto;
+    background-color: rgba(255, 255, 255, 0.8);
+    box-shadow: 0 -2px 5px rgba(0, 0, 0, 0.1);
+    text-align: center;
+    color: #000;
+    font-size: 0.9em;
+}
+
+.footer-container footer {
+    text-align: center;
+    color: #000;
+    font-size: 0.9em;
+}
+
+/* Media queries para responsividad */
+@media (max-width: 768px) {
+    .container {
+        padding: 20px 15px;
+    }
+
+    h1 {
+        font-size: 2em;
+    }
+
+    h2 {
+        font-size: 1.6em;
+    }
+
+    h3 {
+        font-size: 1.3em;
+    }
+
+    p {
+        font-size: 1em;
+    }
+
+    .boton {
+        padding: 10px 20px;
+        font-size: 15px;
+    }
+}
+
+@media (max-width: 480px) {
+    .container {
+        padding: 15px 10px;
+        margin: 10px;
+    }
+
+    h1 {
+        font-size: 1.8em;
+    }
+
+    h2 {
+        font-size: 1.4em;
+    }
+
+    h3 {
+        font-size: 1.1em;
+    }
+
+    p {
+        font-size: 0.95em;
+    }
+
+    .boton {
+        padding: 8px 15px;
+        font-size: 14px;
+    }
+
+    .modal-content {
+        width: 95%;
+        margin: 5% auto;
+        padding: 15px;
+    }
+}
