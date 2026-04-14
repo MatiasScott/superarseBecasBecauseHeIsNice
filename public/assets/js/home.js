@@ -2,6 +2,7 @@
 document.addEventListener('DOMContentLoaded', () => {
     const basePath = document.body.dataset.basePath || "";
     const buildUrl = (path) => `${basePath}${path}`;
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || "";
 
     // Listener para el formulario de búsqueda de cédula
     document.getElementById("buscar-form").addEventListener("submit", async function (e) {
@@ -36,6 +37,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/x-www-form-urlencoded",
+                    "X-CSRF-Token": csrfToken,
                 },
                 body: "cedula=" + encodeURIComponent(cedula),
             });
@@ -64,8 +66,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const modalBody = document.getElementById("modal-body");
 
             if (result.success) {
-                const formHTML = createBecarioFormHTML(result.data.becario, result.data.provincias);
-                modalBody.innerHTML = formHTML;
+                modalBody.innerHTML = result.html || `<p class="text-red-500 font-bold text-lg">Error al cargar la vista del formulario.</p>`;
                 modal.style.display = "flex";
                 setTimeout(() => {
                     modalContent.classList.remove("scale-95", "opacity-0");
@@ -73,7 +74,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     attachFormListeners();
                 }, 10);
             } else {
-                modalBody.innerHTML = `<p class="text-red-500 font-bold text-lg">${result.error}</p>`;
+                modalBody.innerHTML = result.html || `<p class="text-red-500 font-bold text-lg">${result.error}</p>`;
                 modal.style.display = "flex";
                 setTimeout(() => {
                     modalContent.classList.remove("scale-95", "opacity-0");
@@ -124,59 +125,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Función para crear el HTML del formulario del becario
-    function createBecarioFormHTML(becario, provincias) {
-        let provinciaOptions = provincias.map(prov =>
-            `<option value="${prov}" ${becario.provincia === prov ? 'selected' : ''}>${prov}</option>`
-        ).join('');
-
-        return `
-            <h2 class="text-2xl font-bold mb-4 text-center">Datos del Becario</h2>
-            <form id="becario-form" action="${buildUrl("/becario/procesar")}" method="POST" class="space-y-4">
-                <input type="hidden" name="cedula" value="${becario.cedula}">
-                
-                <div>
-                    <label for="nombre" class="block text-sm font-medium text-gray-700">Nombre Completo</label>
-                    <input type="text" id="nombre" name="nombre" value="${becario.nombres} ${becario.apellidos}"
-                           class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm" readonly>
-                </div>
-                <div>
-                    <label for="cedula_display" class="block text-sm font-medium text-gray-700">Cédula</label>
-                    <input type="text" id="cedula_display" name="cedula_display" value="${becario.cedula}"
-                           class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm" readonly>
-                </div>
-                <div>
-                    <label for="email" class="block text-sm font-medium text-gray-700">Correo Electrónico</label>
-                          <input type="email" id="email" name="email" value="${becario.correo || becario.email || ''}"
-                           class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm" readonly>
-                </div>
-                <div>
-                    <label for="ciudad" class="block text-sm font-medium text-gray-700">Ciudad de Residencia</label>
-                    <input type="text" id="ciudad" name="ciudad" value="${becario.ciudad}"
-                           class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
-                </div>
-                <div>
-                    <label for="provincia" class="block text-sm font-medium text-gray-700">Provincia</label>
-                    <select id="provincia" name="provincia"
-                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
-                        ${provinciaOptions}
-                    </select>
-                </div>
-                <div>
-                    <label for="nivel_ingles" class="block text-sm font-medium text-gray-700">Nivel de Inglés</label>
-                          <input type="text" id="nivel_ingles" name="nivel_ingles" value="${becario.nivel_ingles || ''}"
-                           class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm" readonly>
-                </div>
-                <div class="flex justify-end">
-                    <button type="submit"
-                            class="inline-flex justify-center rounded-md border border-transparent bg-indigo-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">
-                        Actualizar Datos
-                    </button>
-                </div>
-            </form>
-        `;
-    }
-
     // Función para adjuntar los listeners a los formularios que se cargan en el modal.
     function attachFormListeners() {
         const certificadoForm = document
@@ -198,6 +146,9 @@ document.addEventListener('DOMContentLoaded', () => {
         // Se ha corregido la URL para que sea relativa a la raíz del sitio
         fetch(buildUrl("/becario/procesarSubida"), {
             method: form.method,
+            headers: {
+                "X-CSRF-Token": csrfToken,
+            },
             body: formData,
         })
         .then((response) => {
@@ -227,13 +178,4 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Se ha movido la llamada a la función para limpiar el mensaje de error al final del evento de 'input'.
-    document.getElementById("cedula").addEventListener("input", function () {
-        const errorMessageDiv = document.getElementById("cedula-error-message");
-        const cedulaInput = document.getElementById("cedula");
-        if (!errorMessageDiv.classList.contains("hidden")) {
-            errorMessageDiv.classList.add("hidden");
-            cedulaInput.classList.remove("border-red-500", "focus:ring-red-500");
-        }
-    });
 });

@@ -1,17 +1,7 @@
-<?php
-// La función h() es opcional aquí si ya la definiste en el controlador,
-// pero es buena práctica tenerla para sanitizar las salidas.
-function h($value)
-{
-    return htmlspecialchars($value ?? '');
-}
-
-$basePath = defined('BASE_URL') && BASE_URL !== '' ? BASE_URL . '/' : '/';
-?>
 <div id="modal-form-content" class="p-6 max-w-lg mx-auto rounded-xl shadow-lg space-y-4">
     <h2 class="text-2xl font-bold text-gray-800 text-center mb-6">Completa tu información</h2>
-    <!-- CAMBIO CLAVE AQUÍ: El action del formulario ahora usa la $basePath dinámica -->
-    <form action="<?= $basePath ?>becario/procesar" method="POST" class="space-y-4">
+    <form action="<?= htmlspecialchars($formAction ?? '') ?>" method="POST" class="space-y-4">
+        <input type="hidden" name="_csrf" value="<?= htmlspecialchars($csrfToken ?? '') ?>">
         <!-- Campo oculto para enviar la cédula, crucial para el procesamiento -->
         <input type="hidden" name="cedula" value="<?= htmlspecialchars($data['becario']['cedula']) ?>">
 

@@ -5,7 +5,7 @@ html, body {
 /* Estilos globales y para el body */
 body {
     font-family: 'Inter', Arial, sans-serif;
-    background-image: url('/assets/fondos2/FORMATOS BECA SENESCYT_Mesa de trabajo 1.jpg');
+    background-image: url('../fondos2/FORMATOS%20BECA%20SENESCYT_Mesa%20de%20trabajo%201.jpg');
     background-size: cover;
     background-attachment: fixed;
     background-repeat: no-repeat;
@@ -171,6 +171,20 @@ strong {
     position: relative; /* Para posicionar el botón de cerrar */
     box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3); /* Sombra más definida */
     animation: fadeInScale 0.3s ease-out; /* Animación de entrada */
+}
+
+#modal-form-content {
+    background: #ffffff;
+    border-radius: 12px;
+}
+
+#modal-form-content h2 {
+    margin-top: 0;
+    margin-bottom: 12px;
+}
+
+#modal-form-content p {
+    margin: 10px 0;
 }
 
 .close {
