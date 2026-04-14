@@ -1,5 +1,13 @@
 <!DOCTYPE html>
 
+<?php
+function homeAssetPath($path)
+{
+    $baseUrl = defined('BASE_URL') ? BASE_URL : '';
+    return ($baseUrl !== '' ? $baseUrl : '') . $path;
+}
+?>
+
 <html lang="es">
 
 <head>
@@ -22,11 +30,11 @@
 
     <!-- Tu archivo de estilos personalizado, si aún lo usas para estilos específicos -->
 
-    <link rel="stylesheet" href="/assets/css/styles.css">
+    <link rel="stylesheet" href="<?= htmlspecialchars(homeAssetPath('/assets/css/styles.css')) ?>">
 
 </head>
 
-<body class="min-h-screen flex flex-col">
+<body class="min-h-screen flex flex-col" data-base-path="<?= htmlspecialchars(defined('BASE_URL') ? BASE_URL : '') ?>">
 
     <main class="flex-1 flex flex-col items-center justify-center">
         <header class="text-center mb-8">
@@ -139,7 +147,7 @@
         <p class="mb-0">&copy; 2025 Instituto Superarse. Todos los derechos reservados.</p>
     </footer>
 
-    <script src="/assets/js/home.js"></script>
+    <script src="<?= htmlspecialchars(homeAssetPath('/assets/js/home.js')) ?>"></script>
 
 </body>
 

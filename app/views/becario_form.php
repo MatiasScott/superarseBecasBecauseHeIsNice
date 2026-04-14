@@ -6,23 +6,7 @@ function h($value)
     return htmlspecialchars($value ?? '');
 }
 
-// Obtener la ruta base de la aplicación dinámicamente
-// $_SERVER['SCRIPT_NAME'] es la ruta del script actual, ej. /ISuperarse/public/index.php
-// dirname() obtiene el directorio padre, ej. /ISuperarse/public
-$basePath = dirname($_SERVER['SCRIPT_NAME']);
-// Aseguramos que la basePath tenga una barra al final si no está vacía
-if (!empty($basePath) && substr($basePath, -1) !== '/') {
-    $basePath .= '/';
-}
-// Si la basePath es solo "/", la dejamos así, sino la ajustamos si es necesario (ej. para XAMPP en localhost)
-if ($basePath === '/' && strpos($_SERVER['REQUEST_URI'], '/ISuperarse/public') !== false) {
-    // Esto es un ajuste específico si index.php está directamente en public/
-    // y el acceso es vía /ISuperarse/public/
-    $basePath = '/ISuperarse/public/';
-} elseif (empty($basePath)) {
-    // Si la aplicación está en la raíz del dominio
-    $basePath = '/';
-}
+$basePath = defined('BASE_URL') && BASE_URL !== '' ? BASE_URL . '/' : '/';
 ?>
 <div id="modal-form-content" class="p-6 max-w-lg mx-auto rounded-xl shadow-lg space-y-4">
     <h2 class="text-2xl font-bold text-gray-800 text-center mb-6">Completa tu información</h2>

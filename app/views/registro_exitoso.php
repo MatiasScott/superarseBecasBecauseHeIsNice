@@ -3,6 +3,12 @@ function h($value)
 {
     return htmlspecialchars($value ?? '', ENT_QUOTES, 'UTF-8');
 }
+
+function successAssetPath($path)
+{
+    $baseUrl = defined('BASE_URL') ? BASE_URL : '';
+    return ($baseUrl !== '' ? $baseUrl : '') . $path;
+}
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -16,7 +22,7 @@ function h($value)
     <!-- Íconos de Bootstrap -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
     <!-- Tu archivo de estilos personalizado, si aún lo usas -->
-    <link rel="stylesheet" href="/ISuperarse/public/assets/css/styles.css">
+    <link rel="stylesheet" href="<?= h(successAssetPath('/assets/css/styles.css')) ?>">
 </head>
 
 <body class="min-h-screen flex flex-col p-4 bg-gray-50">
@@ -102,8 +108,8 @@ function h($value)
                     if ($hay_certificado) {
                         // El enlace ahora apunta al controlador, que gestiona la descarga
                         // Usa la ruta base dinámica para asegurarte de que el enlace funcione en cualquier entorno
-                        $basePath = '/ISuperarse/public/'; // Ajusta esta ruta si es diferente
-                        echo "<a href='{$basePath}becario/descargar?ruta=" . urlencode($ruta_certificado) . "' target='_blank' rel='noopener noreferrer' class='inline-flex items-center justify-center bg-teal-500 hover:bg-teal-600 text-white font-bold py-2 px-4 rounded-full shadow-md transition-all duration-300 transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-teal-300'>";
+                        $basePath = defined('BASE_URL') ? BASE_URL : '';
+                        echo "<a href='" . h($basePath . "/becario/descargar?ruta=" . urlencode($ruta_certificado)) . "' target='_blank' rel='noopener noreferrer' class='inline-flex items-center justify-center bg-teal-500 hover:bg-teal-600 text-white font-bold py-2 px-4 rounded-full shadow-md transition-all duration-300 transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-teal-300'>";
                         echo "<i class='{$icono_boton} mr-2'></i> {$texto_boton}";
                         echo "</a>";
                     } else {
@@ -164,7 +170,7 @@ function h($value)
                 </a>
             </p>
 
-            <video src="/ISuperarse/public/assets/videos/becaIngles.mp4"
+            <video src="<?= h(successAssetPath('/assets/videos/becaIngles.mp4')) ?>"
                 class="w-full max-w-xl mx-auto rounded-lg shadow-xl"
                 controls preload="metadata">
                 Tu navegador no soporta el elemento de video.
@@ -180,14 +186,14 @@ function h($value)
             </p>
 
             <h3 class="text-xl font-bold text-gray-800 mb-3 mt-8">Tutorial de ingreso a Moodle 📚</h3>
-            <video src="/ISuperarse/public/assets/videos/tutorialMoodle.mp4"
+            <video src="<?= h(successAssetPath('/assets/videos/tutorialMoodle.mp4')) ?>"
                 class="w-full max-w-xl mx-auto rounded-lg shadow-xl"
                 controls preload="metadata">
                 Tu navegador no soporta el elemento de video.
             </video>
 
             <h3 class="text-xl font-bold text-gray-800 mb-3 mt-8">Tutorial de ingreso a Zoom 🖥️</h3>
-            <video src="/ISuperarse/public/assets/videos/tutorialZoom.mp4"
+            <video src="<?= h(successAssetPath('/assets/videos/tutorialZoom.mp4')) ?>"
                 class="w-full max-w-xl mx-auto rounded-lg shadow-xl"
                 controls preload="metadata">
                 Tu navegador no soporta el elemento de video.

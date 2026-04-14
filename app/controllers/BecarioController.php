@@ -15,6 +15,11 @@ class BecarioController
         $this->pdo = $pdo;
     }
 
+    public function home()
+    {
+        require BASE_PATH . '/app/views/home.php';
+    }
+
     // Método principal que maneja la búsqueda de un becario por cédula
     public function buscar()
     {
@@ -57,11 +62,9 @@ class BecarioController
     // Método para procesar la actualización de datos del becario
     public function procesar()
     {
-        header('Content-Type: application/json');
-
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
             http_response_code(405);
-            echo json_encode(['success' => false, 'error' => 'Método de solicitud no válido.']);
+            echo 'Método de solicitud no válido.';
             return;
         }
 
@@ -71,19 +74,25 @@ class BecarioController
 
         if (!$cedula || !$ciudad || !$provincia) {
             http_response_code(400);
-            echo json_encode(['success' => false, 'error' => 'Faltan datos requeridos.']);
+            echo 'Faltan datos requeridos.';
             return;
         }
 
         $becarioModel = new Becario($this->pdo);
-        $updateResult = $becarioModel->actualizarDatosBecario($cedula, $ciudad, $provincia);
+        $registro = $becarioModel->procesarRegistro($cedula, $ciudad, $provincia);
 
-        if ($updateResult) {
-            echo json_encode(['success' => true, 'message' => 'Los datos se han actualizado con éxito.']);
-        } else {
+        if (!$registro) {
             http_response_code(500);
-            echo json_encode(['success' => false, 'error' => 'Error al actualizar los datos en la base de datos.']);
+            echo 'Error al actualizar los datos en la base de datos.';
+            return;
         }
+
+        $certificadoModel = new Certificado($this->pdo);
+        $certificados_encontrados = $certificadoModel->getCertificadosByCedula($cedula);
+        $niveles_deseados = ['A1', 'A2', 'B1', 'B2'];
+        $data = $registro;
+
+        require BASE_PATH . '/app/views/registro_exitoso.php';
     }
 
     // Método para procesar la subida de un certificado
@@ -106,7 +115,7 @@ class BecarioController
             return;
         }
 
-        $directorio_subidas = BASE_PATH . '/app/uploads/';
+        $directorio_subidas = BASE_PATH . '/uploads/';
         
         // Crear el directorio si no existe
         if (!is_dir($directorio_subidas)) {
@@ -120,7 +129,7 @@ class BecarioController
         $ruta_destino = $directorio_subidas . $nombre_unico;
         
         // Ruta que se guardará en la base de datos (relativa a la raíz del proyecto)
-        $ruta_para_db = 'ISuperarse/app/uploads/' . $nombre_unico;
+        $ruta_para_db = 'uploads/' . $nombre_unico;
 
         if (move_uploaded_file($archivo_temporal, $ruta_destino)) {
             $certificadoModel = new Certificado($this->pdo);
@@ -150,12 +159,18 @@ class BecarioController
             exit;
         }
         
-        $ruta_relativa = $_GET['ruta'];
-        
-        // Validación de la ruta para evitar ataques de directorio transversal
-        $ruta_absoluta = BASE_PATH . '/' . str_replace('ISuperarse/', '', $ruta_relativa);
-        
-        if (strpos($ruta_relativa, '..') !== false || !file_exists($ruta_absoluta)) {
+        $ruta_relativa = ltrim((string) $_GET['ruta'], '/\\');
+        $directorio_subidas = realpath(BASE_PATH . '/uploads');
+        $ruta_absoluta = realpath(BASE_PATH . '/' . $ruta_relativa);
+
+        if (
+            $ruta_relativa === '' ||
+            strpos($ruta_relativa, 'uploads/') !== 0 ||
+            $directorio_subidas === false ||
+            $ruta_absoluta === false ||
+            strpos($ruta_absoluta, $directorio_subidas) !== 0 ||
+            !is_file($ruta_absoluta)
+        ) {
             http_response_code(404); // Not Found
             echo "Error: El archivo no existe o la ruta es inválida.";
             exit;

@@ -1,5 +1,7 @@
 // Se asegura de que el código se ejecute una vez que el DOM esté completamente cargado.
 document.addEventListener('DOMContentLoaded', () => {
+    const basePath = document.body.dataset.basePath || "";
+    const buildUrl = (path) => `${basePath}${path}`;
 
     // Listener para el formulario de búsqueda de cédula
     document.getElementById("buscar-form").addEventListener("submit", async function (e) {
@@ -26,7 +28,7 @@ document.addEventListener('DOMContentLoaded', () => {
         submitButton.disabled = true;
 
         // Se construye la URL para el fetch.
-        const fetchUrl = "/becario/buscar";
+        const fetchUrl = buildUrl("/becario/buscar");
 
         try {
             // Realiza la petición Fetch al controlador PHP
@@ -93,7 +95,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }, 10);
 
         } finally {
-            submitButton.textContent = "Buscar Becario";
+            submitButton.textContent = "Buscar";
             submitButton.disabled = false;
         }
     });
@@ -130,7 +132,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         return `
             <h2 class="text-2xl font-bold mb-4 text-center">Datos del Becario</h2>
-            <form id="becario-form" action="becario/procesar" method="POST" class="space-y-4">
+            <form id="becario-form" action="${buildUrl("/becario/procesar")}" method="POST" class="space-y-4">
                 <input type="hidden" name="cedula" value="${becario.cedula}">
                 
                 <div>
@@ -145,7 +147,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
                 <div>
                     <label for="email" class="block text-sm font-medium text-gray-700">Correo Electrónico</label>
-                    <input type="email" id="email" name="email" value="${becario.email}"
+                          <input type="email" id="email" name="email" value="${becario.correo || becario.email || ''}"
                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm" readonly>
                 </div>
                 <div>
@@ -162,7 +164,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
                 <div>
                     <label for="nivel_ingles" class="block text-sm font-medium text-gray-700">Nivel de Inglés</label>
-                    <input type="text" id="nivel_ingles" name="nivel_ingles" value="${becario.nivel_ingles}"
+                          <input type="text" id="nivel_ingles" name="nivel_ingles" value="${becario.nivel_ingles || ''}"
                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm" readonly>
                 </div>
                 <div class="flex justify-end">
@@ -177,46 +179,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Función para adjuntar los listeners a los formularios que se cargan en el modal.
     function attachFormListeners() {
-        const becarioForm = document
-            .getElementById("modal-body")
-            .querySelector("form[action$='becario/procesar']");
-        if (becarioForm) {
-            becarioForm.addEventListener("submit", handleBecarioFormSubmission);
-        }
         const certificadoForm = document
             .getElementById("modal-body")
             .querySelector("form[action$='becario/procesarSubida']");
         if (certificadoForm) {
             certificadoForm.addEventListener("submit", handleCertificadoFormSubmission);
         }
-    }
-
-    function handleBecarioFormSubmission(e) {
-        e.preventDefault();
-        const form = e.target;
-        const formData = new FormData(form);
-        const submitButton = form.querySelector('button[type="submit"]');
-        submitButton.disabled = true;
-        submitButton.textContent = "Guardando...";
-
-        // Se ha corregido la URL para que sea relativa a la raíz del sitio
-        fetch(`/index.php/becario/procesar`, {
-            method: form.method,
-            body: formData,
-        })
-        .then((response) => response.text())
-        .then((html) => {
-            document.getElementById("modal-body").innerHTML = html;
-            attachFormListeners();
-        })
-        .catch((error) => {
-            console.error("Error en el envío del formulario:", error);
-            document.getElementById("modal-body").innerHTML = `<p class="text-red-500 font-bold text-lg">Error: ${error.message}</p>`;
-        })
-        .finally(() => {
-            submitButton.disabled = false;
-            submitButton.textContent = "Continuar";
-        });
     }
 
     function handleCertificadoFormSubmission(e) {
@@ -228,7 +196,7 @@ document.addEventListener('DOMContentLoaded', () => {
         submitButton.textContent = "Subiendo...";
 
         // Se ha corregido la URL para que sea relativa a la raíz del sitio
-        fetch(`/index.php/becario/procesarSubida`, {
+        fetch(buildUrl("/becario/procesarSubida"), {
             method: form.method,
             body: formData,
         })

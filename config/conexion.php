@@ -1,7 +1,7 @@
 <?php
 $host = 'localhost';
 $db   = 'becasupe_sistema_usuarios';
-$user = 'becasupe_tics';
+$user = 'root';
 $pass = 'Superarse.2025';
 
 try {
