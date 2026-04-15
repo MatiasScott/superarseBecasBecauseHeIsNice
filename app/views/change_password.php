@@ -9,10 +9,10 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
     <link rel="stylesheet" href="<?= htmlspecialchars($assetCssPath ?? '') ?>">
 </head>
-<body class="bg-gradient-to-br from-purple-50 to-blue-50 min-h-screen flex items-center justify-center p-4" data-base-path="<?= htmlspecialchars($basePath ?? '') ?>">
-    <div class="w-full max-w-md">
+<body class="bg-gray-50 min-h-screen flex items-center justify-center p-4" data-base-path="<?= htmlspecialchars($basePath ?? '') ?>">
+    <div class="w-[90%] max-w-2xl">
         <!-- Card Principal -->
-        <div class="bg-white rounded-2xl shadow-xl p-8">
+        <div class="bg-white rounded-2xl shadow-2xl p-8 md:p-10 border border-gray-100">
             <!-- Header -->
             <div class="text-center mb-8">
                 <div class="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-purple-500 to-blue-500 rounded-full mb-4">

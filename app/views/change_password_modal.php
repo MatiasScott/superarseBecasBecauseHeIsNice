@@ -1,4 +1,4 @@
-<div class="p-6 space-y-4 max-w-lg mx-auto">
+<div class="p-6 space-y-4 max-w-lg mx-auto rounded-2xl border border-gray-100 bg-white shadow-xl">
     <div class="text-center mb-2">
         <div class="inline-flex items-center justify-center w-14 h-14 bg-gradient-to-br from-purple-500 to-blue-500 rounded-full mb-3">
             <i class="bi bi-key text-white text-2xl"></i>
@@ -84,7 +84,7 @@
         <!-- Botón submit -->
         <button type="submit" id="cp-submit"
             class="w-full bg-gradient-to-r from-purple-500 to-blue-500 text-white font-semibold py-3 rounded-lg
-                   hover:shadow-lg hover:from-purple-600 hover:to-blue-600 transition
+                   hover:shadow-lg hover:from-purple-600 hover:to-blue-600 transition focus:outline-none focus:ring-4 focus:ring-purple-200
                    disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
             <i class="bi bi-check-circle"></i>
             Cambiar contraseña y continuar

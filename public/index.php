@@ -61,6 +61,10 @@ switch ($uri) {
     case '/becario/panel':
         $becarioController->panel();
         break;
+
+    case '/becario/logout':
+        $becarioController->logout();
+        break;
     
     case '/becario/procesar':
         $becarioController->procesar();

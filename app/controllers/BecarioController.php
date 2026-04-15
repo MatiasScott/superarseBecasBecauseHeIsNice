@@ -49,6 +49,40 @@ class BecarioController
         $this->renderPanel($registro);
     }
 
+    public function logout()
+    {
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            http_response_code(405);
+            header('Location: ' . $this->url('/'));
+            return;
+        }
+
+        if (!$this->isValidCsrf()) {
+            http_response_code(419);
+            header('Location: ' . $this->url('/'));
+            return;
+        }
+
+        $_SESSION = [];
+
+        if (ini_get('session.use_cookies')) {
+            $params = session_get_cookie_params();
+            setcookie(
+                session_name(),
+                '',
+                time() - 42000,
+                $params['path'],
+                $params['domain'],
+                (bool) $params['secure'],
+                (bool) $params['httponly']
+            );
+        }
+
+        session_destroy();
+        header('Location: ' . $this->url('/'));
+        exit;
+    }
+
     public function login()
     {
         header('Content-Type: application/json');
@@ -411,11 +445,15 @@ class BecarioController
         $certificados_encontrados = $certificadoModel->getCertificadosByCedula($cedula);
         $niveles_deseados = self::ALLOWED_LEVELS;
         $data = $registro;
+        // Los links ahora vienen del JOIN en buscarPorCedula(), pero agregamos valores por defecto si no existen
+        $data['moodle_link'] = !empty($data['moodle_link']) ? $data['moodle_link'] : '#';
+        $data['whatsapp_link'] = !empty($data['whatsapp_link']) ? $data['whatsapp_link'] : '#';
         $assetCssPath = $this->assetPath('/assets/css/styles.css');
         $videoBecaInglesUrl = $this->assetPath('/assets/videos/becaIngles.mp4');
         $videoMoodleUrl = $this->assetPath('/assets/videos/tutorialMoodle.mp4');
         $videoZoomUrl = $this->assetPath('/assets/videos/tutorialZoom.mp4');
-        $changePasswordUrl = $this->url('/becario/change-password');
+        $logoutUrl = $this->url('/becario/logout');
+        $csrfToken = $this->ensureCsrfToken();
 
         $certificadosVista = [];
         foreach ($niveles_deseados as $nivel) {

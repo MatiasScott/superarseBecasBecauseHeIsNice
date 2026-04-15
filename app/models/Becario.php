@@ -19,7 +19,15 @@ class Becario
     public function buscarPorCedula($cedula)
     {
         try {
-            $stmt = $this->pdo->prepare("SELECT * FROM usuarios WHERE cedula = ?");
+            $sql = "SELECT u.*,
+                    lw.enlace AS whatsapp_link,
+                    lm.enlace AS moodle_link
+            FROM usuarios u
+            LEFT JOIN links_whatsapp lw ON u.link_whatsapp_id = lw.id
+            LEFT JOIN links_moodle lm ON u.link_moodle_id = lm.id
+            WHERE u.cedula = ?";
+            
+            $stmt = $this->pdo->prepare($sql);
             $stmt->execute([$cedula]);
             return $stmt->fetch(); // Retorna los datos como un array asociativo o false si no hay resultados
         } catch (PDOException $e) {
