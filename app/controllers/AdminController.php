@@ -479,9 +479,14 @@ class AdminController
             $chunkSize = min(100, (int) ($_POST['chunk_size'] ?? 100));
 
             $archivosChunk = array_slice($archivos, $offset, $chunkSize);
-            $becarioModel = new Becario($this->pdo);
             $certificadoModel = new Certificado($this->pdo);
             $cedulas = $this->obtenerCedulasValidas();
+
+            // Asegurar que el directorio uploads existe
+            $dirUploads = BASE_PATH . '/uploads/';
+            if (!is_dir($dirUploads)) {
+                mkdir($dirUploads, 0755, true);
+            }
 
             $exitosos = 0;
             $errores = 0;
@@ -518,14 +523,25 @@ class AdminController
                     continue;
                 }
 
-                // Guardar certificado
-                $ok = $certificadoModel->guardarCertificado($cedula, $nivel, $rutaArchivo);
+                // Guardar certificado: copiar a /uploads/ y guardar ruta relativa
+                $nombreDestino = $cedula . '_' . $nivel . '_' . time() . '_' . mt_rand(1000, 9999) . '.pdf';
+                $rutaDestino = $dirUploads . $nombreDestino;
+                $rutaParaDb = 'uploads/' . $nombreDestino;
+
+                if (!copy($rutaArchivo, $rutaDestino)) {
+                    $errores++;
+                    $mensajes[] = "❌ Cédula {$cedula}: No se pudo copiar el archivo";
+                    continue;
+                }
+
+                $ok = $certificadoModel->guardarCertificado($cedula, $nivel, $rutaParaDb);
                 if ($ok) {
                     $exitosos++;
-                    $mensajes[] = "✅ Cédula {$cedula}: Certificado guardado";
                 } else {
+                    // Revertir copia si falló el guardado en BD
+                    @unlink($rutaDestino);
                     $errores++;
-                    $mensajes[] = "❌ Cédula {$cedula}: Error al guardar";
+                    $mensajes[] = "❌ Cédula {$cedula}: Error al guardar en base de datos";
                 }
             }
 

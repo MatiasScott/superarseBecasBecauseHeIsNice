@@ -385,52 +385,60 @@ class BecarioController
 
     // Método para descargar archivos de forma segura
     public function descargar() {
-        if (!isset($_GET['ruta'])) {
-            http_response_code(400); // Bad Request
-            echo "Error: La ruta del archivo no está especificada.";
-            exit;
-        }
-        
-        $ruta_relativa = ltrim((string) $_GET['ruta'], '/\\');
-        $directorio_subidas = realpath(BASE_PATH . '/uploads');
-        $ruta_absoluta = realpath(BASE_PATH . '/' . $ruta_relativa);
+        $cedula = trim((string) ($_GET['cedula'] ?? ''));
+        $nivel  = trim((string) ($_GET['nivel'] ?? ''));
 
-        if (
-            $ruta_relativa === '' ||
-            strpos($ruta_relativa, 'uploads/') !== 0 ||
-            $directorio_subidas === false ||
-            $ruta_absoluta === false ||
-            strpos($ruta_absoluta, $directorio_subidas) !== 0 ||
-            !is_file($ruta_absoluta)
-        ) {
-            http_response_code(404); // Not Found
-            echo "Error: El archivo no existe o la ruta es inválida.";
+        if ($cedula === '' || $nivel === '') {
+            http_response_code(400);
+            echo "Error: Parámetros incompletos.";
             exit;
         }
 
-        $nombreArchivo = basename($ruta_absoluta);
-        if (!preg_match('/^(\d{10})_[A-Z0-9]+_\d+\.pdf$/i', $nombreArchivo, $coincidencias)) {
+        if (!preg_match('/^\d{10}$/', $cedula)) {
+            http_response_code(400);
+            echo "Error: Cédula inválida.";
+            exit;
+        }
+
+        if (!$this->isAuthorizedCedula($cedula)) {
             http_response_code(403);
             echo "Error: No autorizado.";
             exit;
         }
 
-        $cedulaArchivo = $coincidencias[1] ?? '';
-        if (!$this->isAuthorizedCedula($cedulaArchivo)) {
-            http_response_code(403);
-            echo "Error: No autorizado.";
+        // Buscar la ruta real del certificado en la base de datos
+        $certificadoModel = new Certificado($this->pdo);
+        $certificados = $certificadoModel->getCertificadosByCedula($cedula);
+
+        if (!isset($certificados[$nivel])) {
+            http_response_code(404);
+            echo "Error: Certificado no encontrado.";
+            exit;
+        }
+
+        $rutaArchivo = $certificados[$nivel];
+
+        // Si es ruta relativa (uploads/...) resolver desde BASE_PATH
+        if (!file_exists($rutaArchivo)) {
+            $rutaArchivo = BASE_PATH . '/' . ltrim($rutaArchivo, '/\\');
+        }
+
+        $rutaReal = realpath($rutaArchivo);
+        if ($rutaReal === false || !is_file($rutaReal)) {
+            http_response_code(404);
+            echo "Error: El archivo no existe en el servidor.";
             exit;
         }
 
         header('Content-Description: File Transfer');
-        header('Content-Type: application/octet-stream');
-        header('Content-Disposition: attachment; filename="' . basename($ruta_absoluta) . '"');
+        header('Content-Type: application/pdf');
+        header('Content-Disposition: attachment; filename="' . basename($rutaReal) . '"');
         header('Expires: 0');
         header('Cache-Control: must-revalidate');
         header('Pragma: public');
-        header('Content-Length: ' . filesize($ruta_absoluta));
-        
-        readfile($ruta_absoluta);
+        header('Content-Length: ' . filesize($rutaReal));
+
+        readfile($rutaReal);
         exit;
     }
 
@@ -513,7 +521,7 @@ class BecarioController
             $certificadosVista[] = [
                 'nivel' => $nivel,
                 'disponible' => $ruta !== null,
-                'url' => $ruta !== null ? $this->url('/becario/descargar?ruta=' . rawurlencode($ruta)) : null,
+                'url' => $ruta !== null ? $this->url('/becario/descargar?cedula=' . rawurlencode($cedula) . '&nivel=' . rawurlencode($nivel)) : null,
             ];
         }
 
