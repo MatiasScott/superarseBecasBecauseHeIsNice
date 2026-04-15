@@ -212,6 +212,7 @@ class AdminController
         $filtroSoloPendientes = $estudiantesModulo['filtroSoloPendientes'];
         $createAdminAction = $adminsModulo['createAdminAction'];
         $admins = $adminsModulo['admins'] ?? [];
+        $bulkUploadAction = $certificadosModulo['bulkUploadAction'];
         $homeUrl = $this->url('/');
         $adminChangePasswordUrl = $this->url('/admin/change-password');
         $adminLogoutUrl = $this->url('/admin/logout');
@@ -416,6 +417,145 @@ class AdminController
         exit;
     }
 
+    public function adminBulkUploadCertificados()
+    {
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            http_response_code(405);
+            echo json_encode(['success' => false, 'error' => 'Método no permitido']);
+            return;
+        }
+
+        if (!$this->isAdminAuthenticated()) {
+            echo json_encode(['success' => false, 'error' => 'No autorizado']);
+            return;
+        }
+
+        if (!$this->isValidCsrf()) {
+            echo json_encode(['success' => false, 'error' => 'Token CSRF inválido']);
+            return;
+        }
+
+        header('Content-Type: application/json');
+
+        $action = (string) ($_POST['action'] ?? '');
+        $carpetaRuta = (string) ($_POST['carpeta_ruta'] ?? '');
+        $nivel = (string) ($_POST['nivel'] ?? '');
+
+        if (!$carpetaRuta || !$nivel) {
+            echo json_encode(['success' => false, 'error' => 'Ruta o nivel no especificado']);
+            return;
+        }
+
+        if (!in_array($nivel, self::ALLOWED_LEVELS, true)) {
+            echo json_encode(['success' => false, 'error' => 'Nivel no válido']);
+            return;
+        }
+
+        // Validar y normalizar la ruta
+        $rutaReal = realpath($carpetaRuta);
+        if (!$rutaReal || !is_dir($rutaReal)) {
+            echo json_encode(['success' => false, 'error' => 'Carpeta no encontrada o no es válida']);
+            return;
+        }
+
+        // Buscar archivos PDF
+        $archivos = glob($rutaReal . '/*.pdf');
+        if (!is_array($archivos)) {
+            $archivos = [];
+        }
+
+        if ($action === 'init') {
+            echo json_encode([
+                'success' => true,
+                'total' => count($archivos),
+                'carpeta' => $rutaReal,
+                'nivel' => $nivel,
+            ]);
+            return;
+        }
+
+        if ($action === 'process') {
+            $offset = (int) ($_POST['offset'] ?? 0);
+            $chunkSize = min(100, (int) ($_POST['chunk_size'] ?? 100));
+
+            $archivosChunk = array_slice($archivos, $offset, $chunkSize);
+            $becarioModel = new Becario($this->pdo);
+            $certificadoModel = new Certificado($this->pdo);
+            $cedulas = $this->obtenerCedulasValidas();
+
+            $exitosos = 0;
+            $errores = 0;
+            $mensajes = [];
+
+            foreach ($archivosChunk as $rutaArchivo) {
+                $nombreArchivo = basename($rutaArchivo);
+                $partes = explode('_', $nombreArchivo);
+
+                if (empty($partes[0])) {
+                    $errores++;
+                    $mensajes[] = "❌ {$nombreArchivo}: No se pudo extraer la cédula";
+                    continue;
+                }
+
+                $cedula = $partes[0];
+
+                // Validar que sea cédula (10 dígitos)
+                if (!preg_match('/^\\d+$/', $cedula) || strlen($cedula) > 10) {
+                    $errores++;
+                    $mensajes[] = "❌ {$nombreArchivo}: Cédula inválida ({$cedula})";
+                    continue;
+                }
+
+                // Rellenar con cero si es necesario
+                if (strlen($cedula) < 10) {
+                    $cedula = str_pad($cedula, 10, '0', STR_PAD_LEFT);
+                }
+
+                // Validar que la cédula existe en base de datos
+                if (!in_array($cedula, $cedulas, true)) {
+                    $errores++;
+                    $mensajes[] = "⚠️ {$nombreArchivo}: Cédula {$cedula} no encontrada en BD";
+                    continue;
+                }
+
+                // Guardar certificado
+                $ok = $certificadoModel->guardarCertificado($cedula, $nivel, $rutaArchivo);
+                if ($ok) {
+                    $exitosos++;
+                    $mensajes[] = "✅ Cédula {$cedula}: Certificado guardado";
+                } else {
+                    $errores++;
+                    $mensajes[] = "❌ Cédula {$cedula}: Error al guardar";
+                }
+            }
+
+            echo json_encode([
+                'success' => true,
+                'exitosos' => $exitosos,
+                'errores' => $errores,
+                'mensajes' => $mensajes,
+            ]);
+            return;
+        }
+
+        echo json_encode(['success' => false, 'error' => 'Acción no válida']);
+    }
+
+    private function obtenerCedulasValidas(): array
+    {
+        try {
+            $stmt = $this->pdo->query('SELECT cedula FROM usuarios ORDER BY cedula ASC');
+            $cedulas = [];
+            while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                $cedulas[] = (string) ($row['cedula'] ?? '');
+            }
+            return $cedulas;
+        } catch (PDOException $e) {
+            error_log('Error al obtener cédulas: ' . $e->getMessage());
+            return [];
+        }
+    }
+
     private function obtenerDatosModuloResumenAdmin(): array
     {
         $becarioModel = new Becario($this->pdo);
@@ -484,6 +624,7 @@ class AdminController
             'conteoNiveles' => $certificadoModel->obtenerConteoPorNiveles($niveles),
             'resumenCertificados' => $certificadoModel->obtenerResumenGeneral(),
             'ultimasCargas' => $certificadoModel->obtenerUltimasCargas(10),
+            'bulkUploadAction' => $this->url('/admin/bulk-upload-certificados'),
         ];
     }
 

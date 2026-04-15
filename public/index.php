@@ -120,6 +120,10 @@ switch ($uri) {
         $adminController->adminCreateAccount();
         break;
 
+    case '/admin/bulk-upload-certificados':
+        $adminController->adminBulkUploadCertificados();
+        break;
+
     default:
         http_response_code(404);
         echo "404 - Página no encontrada";
