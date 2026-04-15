@@ -23,6 +23,7 @@ define('BASE_URL', rtrim($baseUrl, '/'));
 
 require_once BASE_PATH . '/config/conexion.php';
 require_once BASE_PATH . '/app/controllers/BecarioController.php';
+require_once BASE_PATH . '/app/controllers/AdminController.php';
 
 // Obtener la URI completa y eliminar la parte del subdirectorio
 $uri = rtrim(parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH), '/');
@@ -43,6 +44,7 @@ if ($uri === '') {
 
 // Lógica del enrutador
 $becarioController = new BecarioController();
+$adminController = new AdminController();
 
 switch ($uri) {
     case '/':
@@ -87,31 +89,35 @@ switch ($uri) {
         break;
 
     case '/admin/dashboard':
-        $becarioController->adminDashboard();
+        $adminController->adminDashboard();
         break;
 
     case '/admin/login':
-        $becarioController->adminLogin();
+        $adminController->adminLogin();
         break;
 
     case '/admin':
-        $becarioController->adminLogin();
+        $adminController->adminLogin();
         break;
 
     case '/admin/logout':
-        $becarioController->adminLogout();
+        $adminController->adminLogout();
         break;
 
     case '/admin/change-password':
-        $becarioController->adminChangePassword();
+        $adminController->adminChangePassword();
         break;
 
     case '/admin/reset-password':
-        $becarioController->adminResetPassword();
+        $adminController->adminResetPassword();
+        break;
+
+    case '/admin/discard-reset-request':
+        $adminController->adminDiscardResetRequest();
         break;
 
     case '/admin/create-account':
-        $becarioController->adminCreateAccount();
+        $adminController->adminCreateAccount();
         break;
 
     default:

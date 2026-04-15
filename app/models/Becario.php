@@ -131,6 +131,159 @@ class Becario
     }
 
     /**
+     * Crea o refresca una solicitud pendiente de reseteo de contrasena.
+     * @param string $cedula
+     * @return bool
+     */
+    public function crearSolicitudResetContrasenia($cedula)
+    {
+        try {
+            $sqlExiste = "SELECT id FROM solicitudes_reset_contrasenia
+                         WHERE cedula = ? AND estado = 'pendiente'
+                         ORDER BY id DESC LIMIT 1";
+            $stmtExiste = $this->pdo->prepare($sqlExiste);
+            $stmtExiste->execute([(string) $cedula]);
+            $existente = $stmtExiste->fetch(PDO::FETCH_ASSOC);
+
+            if ($existente && isset($existente['id'])) {
+                $stmtUpdate = $this->pdo->prepare("UPDATE solicitudes_reset_contrasenia SET solicitado_en = NOW() WHERE id = ?");
+                return $stmtUpdate->execute([(int) $existente['id']]);
+            }
+
+            $stmtInsert = $this->pdo->prepare("INSERT INTO solicitudes_reset_contrasenia (cedula, estado, solicitado_en) VALUES (?, 'pendiente', NOW())");
+            return $stmtInsert->execute([(string) $cedula]);
+        } catch (PDOException $e) {
+            error_log("Error al crear solicitud de reseteo: " . $e->getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Obtiene solicitudes de reseteo para panel admin con filtros opcionales.
+     * @param array|int $filtros
+     * @param int $limite
+     * @return array
+     */
+    public function obtenerSolicitudesResetPendientes($filtros = [], $limite = 20)
+    {
+        try {
+            if (!is_array($filtros)) {
+                $limite = (int) $filtros;
+                $filtros = [];
+            }
+
+            $limite = max(1, min(200, (int) $limite));
+
+            $soloPendientes = !isset($filtros['solo_pendientes']) || (int) $filtros['solo_pendientes'] === 1;
+            $fechaDesde = trim((string) ($filtros['fecha_desde'] ?? ''));
+            $fechaHasta = trim((string) ($filtros['fecha_hasta'] ?? ''));
+
+            if ($fechaDesde !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $fechaDesde)) {
+                $fechaDesde = '';
+            }
+
+            if ($fechaHasta !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $fechaHasta)) {
+                $fechaHasta = '';
+            }
+
+            $where = [];
+            $params = [];
+
+            if ($soloPendientes) {
+                $where[] = "s.estado = ?";
+                $params[] = 'pendiente';
+            }
+
+            if ($fechaDesde !== '') {
+                $where[] = "DATE(s.solicitado_en) >= ?";
+                $params[] = $fechaDesde;
+            }
+
+            if ($fechaHasta !== '') {
+                $where[] = "DATE(s.solicitado_en) <= ?";
+                $params[] = $fechaHasta;
+            }
+
+            $whereSql = empty($where) ? '' : ('WHERE ' . implode(' AND ', $where));
+
+            $sql = "SELECT s.id, s.cedula, s.estado, s.solicitado_en, s.atendido_en,
+                           u.nombres, u.apellidos,
+                           a.usuario AS atendido_por_usuario
+                    FROM solicitudes_reset_contrasenia s
+                    LEFT JOIN usuarios u ON u.cedula = s.cedula
+                    LEFT JOIN admins a ON a.id = s.atendido_por_admin_id
+                    {$whereSql}
+                    ORDER BY s.solicitado_en DESC, s.id DESC
+                    LIMIT {$limite}";
+
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute($params);
+            return $stmt->fetchAll(PDO::FETCH_ASSOC);
+        } catch (PDOException $e) {
+            error_log("Error al obtener solicitudes de reseteo: " . $e->getMessage());
+            return [];
+        }
+    }
+
+    /**
+     * Cuenta solicitudes pendientes de reseteo.
+     * @return int
+     */
+    public function contarSolicitudesResetPendientes()
+    {
+        try {
+            $stmt = $this->pdo->query("SELECT COUNT(*) AS total FROM solicitudes_reset_contrasenia WHERE estado = 'pendiente'");
+            $row = $stmt ? $stmt->fetch(PDO::FETCH_ASSOC) : null;
+            return (int) ($row['total'] ?? 0);
+        } catch (PDOException $e) {
+            error_log("Error al contar solicitudes pendientes de reseteo: " . $e->getMessage());
+            return 0;
+        }
+    }
+
+    /**
+     * Marca una solicitud de reseteo como atendida.
+     * @param int $solicitudId
+     * @param int $adminId
+     * @return bool
+     */
+    public function marcarSolicitudResetAtendida($solicitudId, $adminId)
+    {
+        try {
+            $sql = "UPDATE solicitudes_reset_contrasenia
+                    SET estado = 'atendida', atendido_en = NOW(), atendido_por_admin_id = ?
+                    WHERE id = ? AND estado = 'pendiente'";
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute([(int) $adminId, (int) $solicitudId]);
+            return $stmt->rowCount() > 0;
+        } catch (PDOException $e) {
+            error_log("Error al marcar solicitud de reseteo atendida: " . $e->getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Marca una solicitud de reseteo como descartada.
+     * @param int $solicitudId
+     * @param int $adminId
+     * @return bool
+     */
+    public function marcarSolicitudResetDescartada($solicitudId, $adminId)
+    {
+        try {
+            $sql = "UPDATE solicitudes_reset_contrasenia
+                    SET estado = 'descartada', atendido_en = NOW(), atendido_por_admin_id = ?
+                    WHERE id = ? AND estado = 'pendiente'";
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute([(int) $adminId, (int) $solicitudId]);
+            return $stmt->rowCount() > 0;
+        } catch (PDOException $e) {
+            error_log("Error al marcar solicitud de reseteo descartada: " . $e->getMessage());
+            return false;
+        }
+    }
+
+    /**
      * Obtiene estadísticas generales de estudiantes.
      * @return array
      */

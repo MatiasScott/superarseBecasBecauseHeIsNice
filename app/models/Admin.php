@@ -69,4 +69,20 @@ class Admin
             return false;
         }
     }
+
+    /**
+     * Obtiene todos los administradores activos.
+     * @return array
+     */
+    public function obtenerTodos()
+    {
+        try {
+            $stmt = $this->pdo->prepare('SELECT id, usuario, nombre, primer_inicio, activo, creado_en FROM admins WHERE activo = 1 ORDER BY usuario ASC');
+            $stmt->execute();
+            return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        } catch (PDOException $e) {
+            error_log('Error al obtener lista de admins: ' . $e->getMessage());
+            return [];
+        }
+    }
 }
