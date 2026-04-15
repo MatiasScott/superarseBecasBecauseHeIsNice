@@ -3,6 +3,7 @@
 // Incluimos los modelos que vamos a usar
 require_once BASE_PATH . '/app/models/Becario.php';
 require_once BASE_PATH . '/app/models/Certificado.php';
+require_once BASE_PATH . '/app/models/Admin.php';
 
 class BecarioController
 {
@@ -24,6 +25,7 @@ class BecarioController
         $homeJsPath = $this->assetPath('/assets/js/home.js');
         $basePath = $this->baseUrl();
         $csrfToken = $this->ensureCsrfToken();
+        $forgotPasswordUrl = $this->url('/becario/forgot-password');
 
         require BASE_PATH . '/app/views/home.php';
     }
@@ -80,6 +82,389 @@ class BecarioController
 
         session_destroy();
         header('Location: ' . $this->url('/'));
+        exit;
+    }
+
+    public function forgotPassword()
+    {
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            if (!$this->isValidCsrf()) {
+                http_response_code(419);
+                echo 'La sesión expiró. Recarga la página e intenta nuevamente.';
+                return;
+            }
+
+            $cedula = trim((string) ($_POST['cedula'] ?? ''));
+            $messageType = 'error';
+            $message = 'Debes ingresar una cédula válida de 10 dígitos.';
+
+            if (preg_match('/^\d{10}$/', $cedula)) {
+                $becarioModel = new Becario($this->pdo);
+                $becarioData = $becarioModel->buscarPorCedula($cedula);
+
+                if ($becarioData) {
+                    $messageType = 'success';
+                    $message = 'Solicitud recibida. Un administrador puede resetear tu contraseña desde el panel administrativo.';
+                } else {
+                    $message = 'No encontramos esa cédula. Verifica el dato e intenta nuevamente.';
+                }
+            }
+
+            $assetCssPath = $this->assetPath('/assets/css/styles.css');
+            $basePath = $this->baseUrl();
+            $csrfToken = $this->ensureCsrfToken();
+            $homeUrl = $this->url('/');
+            require BASE_PATH . '/app/views/forgot_password.php';
+            return;
+        }
+
+        $assetCssPath = $this->assetPath('/assets/css/styles.css');
+        $basePath = $this->baseUrl();
+        $csrfToken = $this->ensureCsrfToken();
+        $homeUrl = $this->url('/');
+        $messageType = '';
+        $message = '';
+        require BASE_PATH . '/app/views/forgot_password.php';
+    }
+
+    public function adminLogin()
+    {
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            if (!$this->isValidCsrf()) {
+                http_response_code(419);
+                echo 'La sesión expiró. Recarga la página e intenta nuevamente.';
+                return;
+            }
+
+            $usuario = trim((string) ($_POST['usuario'] ?? ''));
+            $password = (string) ($_POST['password'] ?? '');
+            $error = '';
+
+            if ($usuario === '' || $password === '') {
+                $error = 'Usuario y contraseña son obligatorios.';
+            } else {
+                $adminModel = new Admin($this->pdo);
+                $admin = $adminModel->buscarPorUsuario($usuario);
+
+                if (!$admin || !$adminModel->verifyPassword($password, (string) ($admin['contrasenia_login'] ?? ''))) {
+                    $error = 'Credenciales inválidas.';
+                } else {
+                    $_SESSION['admin_id'] = (int) $admin['id'];
+                    $_SESSION['admin_usuario'] = (string) $admin['usuario'];
+
+                    if ((int) ($admin['primer_inicio'] ?? 1) === 1) {
+                        header('Location: ' . $this->url('/admin/change-password'));
+                        exit;
+                    }
+
+                    header('Location: ' . $this->url('/admin/dashboard'));
+                    exit;
+                }
+            }
+
+            $assetCssPath = $this->assetPath('/assets/css/styles.css');
+            $basePath = $this->baseUrl();
+            $csrfToken = $this->ensureCsrfToken();
+            $errorMessage = $error;
+            require BASE_PATH . '/app/views/admin_login.php';
+            return;
+        }
+
+        $assetCssPath = $this->assetPath('/assets/css/styles.css');
+        $basePath = $this->baseUrl();
+        $csrfToken = $this->ensureCsrfToken();
+        $errorMessage = '';
+        require BASE_PATH . '/app/views/admin_login.php';
+    }
+
+    public function adminLogout()
+    {
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            http_response_code(405);
+            header('Location: ' . $this->url('/admin/login'));
+            return;
+        }
+
+        if (!$this->isValidCsrf()) {
+            http_response_code(419);
+            header('Location: ' . $this->url('/admin/login'));
+            return;
+        }
+
+        unset($_SESSION['admin_id'], $_SESSION['admin_usuario']);
+        header('Location: ' . $this->url('/admin/login'));
+        exit;
+    }
+
+    public function adminChangePassword()
+    {
+        if (!$this->isAdminAuthenticated()) {
+            header('Location: ' . $this->url('/admin/login'));
+            exit;
+        }
+
+        $adminModel = new Admin($this->pdo);
+        $admin = $adminModel->buscarPorId((int) ($_SESSION['admin_id'] ?? 0));
+
+        if (!$admin) {
+            unset($_SESSION['admin_id'], $_SESSION['admin_usuario']);
+            header('Location: ' . $this->url('/admin/login'));
+            exit;
+        }
+
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            if (!$this->isValidCsrf()) {
+                http_response_code(419);
+                echo 'La sesión expiró. Recarga la página e intenta nuevamente.';
+                return;
+            }
+
+            $currentPassword = (string) ($_POST['current_password'] ?? '');
+            $newPassword = (string) ($_POST['new_password'] ?? '');
+            $confirmPassword = (string) ($_POST['confirm_password'] ?? '');
+            $errorMessage = '';
+            $successMessage = '';
+
+            if ($currentPassword === '' || $newPassword === '' || $confirmPassword === '') {
+                $errorMessage = 'Completa todos los campos.';
+            } elseif (!$adminModel->verifyPassword($currentPassword, (string) ($admin['contrasenia_login'] ?? ''))) {
+                $errorMessage = 'La contraseña actual es incorrecta.';
+            } elseif ($newPassword !== $confirmPassword) {
+                $errorMessage = 'La confirmación de contraseña no coincide.';
+            } else {
+                $validation = $this->validatePasswordRequirements($newPassword);
+                if (!$validation['valid']) {
+                    $errorMessage = $validation['message'];
+                } else {
+                    $newHash = $adminModel->hashPassword($newPassword);
+                    $ok = $adminModel->actualizarContrasenia((int) $admin['id'], $newHash, 0);
+
+                    if ($ok) {
+                        $_SESSION['admin_flash'] = [
+                            'type' => 'success',
+                            'message' => 'Contraseña actualizada correctamente.',
+                        ];
+                        header('Location: ' . $this->url('/admin/dashboard'));
+                        exit;
+                    }
+
+                    $errorMessage = 'No se pudo actualizar la contraseña.';
+                }
+            }
+
+            $assetCssPath = $this->assetPath('/assets/css/styles.css');
+            $basePath = $this->baseUrl();
+            $csrfToken = $this->ensureCsrfToken();
+            $adminUsuario = (string) ($admin['usuario'] ?? '');
+            $isFirstLogin = (int) ($admin['primer_inicio'] ?? 0) === 1;
+            require BASE_PATH . '/app/views/admin_change_password.php';
+            return;
+        }
+
+        $assetCssPath = $this->assetPath('/assets/css/styles.css');
+        $basePath = $this->baseUrl();
+        $csrfToken = $this->ensureCsrfToken();
+        $adminUsuario = (string) ($admin['usuario'] ?? '');
+        $isFirstLogin = (int) ($admin['primer_inicio'] ?? 0) === 1;
+        $errorMessage = '';
+        $successMessage = '';
+        require BASE_PATH . '/app/views/admin_change_password.php';
+    }
+
+    public function adminDashboard()
+    {
+        if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
+            http_response_code(405);
+            echo 'Método no permitido.';
+            return;
+        }
+
+        if (!$this->isAdminAuthenticated()) {
+            header('Location: ' . $this->url('/admin/login'));
+            exit;
+        }
+
+        $adminModel = new Admin($this->pdo);
+        $admin = $adminModel->buscarPorId((int) ($_SESSION['admin_id'] ?? 0));
+        if (!$admin) {
+            unset($_SESSION['admin_id'], $_SESSION['admin_usuario']);
+            header('Location: ' . $this->url('/admin/login'));
+            exit;
+        }
+
+        if ((int) ($admin['primer_inicio'] ?? 1) === 1) {
+            header('Location: ' . $this->url('/admin/change-password'));
+            exit;
+        }
+
+        $becarioModel = new Becario($this->pdo);
+        $certificadoModel = new Certificado($this->pdo);
+
+        $niveles = self::ALLOWED_LEVELS;
+        $resumenEstudiantes = $becarioModel->obtenerResumenDashboard();
+        $estadoContrasenias = $becarioModel->obtenerEstadoContrasenias();
+        $conteoNiveles = $certificadoModel->obtenerConteoPorNiveles($niveles);
+        $resumenCertificados = $certificadoModel->obtenerResumenGeneral();
+        $ultimasCargas = $certificadoModel->obtenerUltimasCargas(10);
+
+        $flash = $_SESSION['admin_flash'] ?? null;
+        unset($_SESSION['admin_flash']);
+
+        $assetCssPath = $this->assetPath('/assets/css/styles.css');
+        $basePath = $this->baseUrl();
+        $csrfToken = $this->ensureCsrfToken();
+        $resetPasswordAction = $this->url('/admin/reset-password');
+        $createAdminAction = $this->url('/admin/create-account');
+        $homeUrl = $this->url('/');
+        $adminChangePasswordUrl = $this->url('/admin/change-password');
+        $adminLogoutUrl = $this->url('/admin/logout');
+        $adminUsuario = (string) ($admin['usuario'] ?? '');
+
+        require BASE_PATH . '/app/views/admin_dashboard.php';
+    }
+
+    public function adminCreateAccount()
+    {
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            http_response_code(405);
+            echo 'Método no permitido.';
+            return;
+        }
+
+        if (!$this->isAdminAuthenticated()) {
+            header('Location: ' . $this->url('/admin/login'));
+            exit;
+        }
+
+        if (!$this->isValidCsrf()) {
+            $_SESSION['admin_flash'] = [
+                'type' => 'error',
+                'message' => 'La sesión expiró. Recarga el panel antes de intentar de nuevo.',
+            ];
+            header('Location: ' . $this->url('/admin/dashboard'));
+            exit;
+        }
+
+        $usuario = trim((string) ($_POST['usuario'] ?? ''));
+        $nombre = trim((string) ($_POST['nombre'] ?? ''));
+        $password = (string) ($_POST['password'] ?? '');
+        $confirmPassword = (string) ($_POST['confirm_password'] ?? '');
+        $primerInicio = isset($_POST['primer_inicio']) ? 1 : 0;
+
+        if (!preg_match('/^[a-zA-Z0-9._-]{4,60}$/', $usuario)) {
+            $_SESSION['admin_flash'] = [
+                'type' => 'error',
+                'message' => 'El usuario admin debe tener entre 4 y 60 caracteres y solo usar letras, números, punto, guion o guion bajo.',
+            ];
+            header('Location: ' . $this->url('/admin/dashboard'));
+            exit;
+        }
+
+        if ($password === '' || $confirmPassword === '') {
+            $_SESSION['admin_flash'] = [
+                'type' => 'error',
+                'message' => 'Debes ingresar y confirmar la contraseña.',
+            ];
+            header('Location: ' . $this->url('/admin/dashboard'));
+            exit;
+        }
+
+        if ($password !== $confirmPassword) {
+            $_SESSION['admin_flash'] = [
+                'type' => 'error',
+                'message' => 'La confirmación de contraseña no coincide.',
+            ];
+            header('Location: ' . $this->url('/admin/dashboard'));
+            exit;
+        }
+
+        $validation = $this->validatePasswordRequirements($password);
+        if (!$validation['valid']) {
+            $_SESSION['admin_flash'] = [
+                'type' => 'error',
+                'message' => $validation['message'],
+            ];
+            header('Location: ' . $this->url('/admin/dashboard'));
+            exit;
+        }
+
+        $adminModel = new Admin($this->pdo);
+        if ($adminModel->buscarPorUsuario($usuario)) {
+            $_SESSION['admin_flash'] = [
+                'type' => 'error',
+                'message' => 'Ya existe un admin con ese usuario.',
+            ];
+            header('Location: ' . $this->url('/admin/dashboard'));
+            exit;
+        }
+
+        $hash = $adminModel->hashPassword($password);
+        $ok = $adminModel->crearAdmin($usuario, $nombre !== '' ? $nombre : null, $hash, $primerInicio);
+
+        $_SESSION['admin_flash'] = [
+            'type' => $ok ? 'success' : 'error',
+            'message' => $ok
+                ? 'Cuenta admin creada correctamente.'
+                : 'No se pudo crear la cuenta admin. Verifica que el usuario no exista e intenta nuevamente.',
+        ];
+
+        header('Location: ' . $this->url('/admin/dashboard'));
+        exit;
+    }
+
+    public function adminResetPassword()
+    {
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            http_response_code(405);
+            echo 'Método no permitido.';
+            return;
+        }
+
+        if (!$this->isAdminAuthenticated()) {
+            header('Location: ' . $this->url('/admin/login'));
+            exit;
+        }
+
+        if (!$this->isValidCsrf()) {
+            $_SESSION['admin_flash'] = [
+                'type' => 'error',
+                'message' => 'La sesión expiró. Recarga el panel antes de intentar de nuevo.',
+            ];
+            header('Location: ' . $this->url('/admin/dashboard'));
+            exit;
+        }
+
+        $cedula = trim((string) ($_POST['cedula'] ?? ''));
+        if (!preg_match('/^\d{10}$/', $cedula)) {
+            $_SESSION['admin_flash'] = [
+                'type' => 'error',
+                'message' => 'La cédula debe tener 10 dígitos.',
+            ];
+            header('Location: ' . $this->url('/admin/dashboard'));
+            exit;
+        }
+
+        $becarioModel = new Becario($this->pdo);
+        $registro = $becarioModel->buscarPorCedula($cedula);
+
+        if (!$registro) {
+            $_SESSION['admin_flash'] = [
+                'type' => 'error',
+                'message' => 'No existe un estudiante con esa cédula.',
+            ];
+            header('Location: ' . $this->url('/admin/dashboard'));
+            exit;
+        }
+
+        $ok = $becarioModel->resetearContraseniaLoginPorCedula($cedula);
+        $_SESSION['admin_flash'] = [
+            'type' => $ok ? 'success' : 'error',
+            'message' => $ok
+                ? 'Contraseña reseteada correctamente. La nueva contraseña temporal es la cédula del estudiante.'
+                : 'No se pudo resetear la contraseña. Intenta nuevamente.',
+        ];
+
+        header('Location: ' . $this->url('/admin/dashboard'));
         exit;
     }
 
@@ -401,7 +786,11 @@ class BecarioController
             return (string) $_SERVER['HTTP_X_CSRF_TOKEN'];
         }
 
-        return (string) ($_POST['_csrf'] ?? '');
+        if (isset($_POST['_csrf'])) {
+            return (string) $_POST['_csrf'];
+        }
+
+        return (string) ($_POST['csrf_token'] ?? '');
     }
 
     private function isValidCsrf(): bool
@@ -415,6 +804,11 @@ class BecarioController
     private function isAuthorizedCedula(string $cedula): bool
     {
         return isset($_SESSION['authorized_cedula']) && hash_equals((string) $_SESSION['authorized_cedula'], $cedula);
+    }
+
+    private function isAdminAuthenticated(): bool
+    {
+        return isset($_SESSION['admin_id']) && (int) $_SESSION['admin_id'] > 0;
     }
 
     private function ensureLoginPassword(Becario $becarioModel, array &$becarioData, string $cedula): bool

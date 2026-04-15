@@ -82,6 +82,38 @@ switch ($uri) {
         $becarioController->changePassword();
         break;
 
+    case '/becario/forgot-password':
+        $becarioController->forgotPassword();
+        break;
+
+    case '/admin/dashboard':
+        $becarioController->adminDashboard();
+        break;
+
+    case '/admin/login':
+        $becarioController->adminLogin();
+        break;
+
+    case '/admin':
+        $becarioController->adminLogin();
+        break;
+
+    case '/admin/logout':
+        $becarioController->adminLogout();
+        break;
+
+    case '/admin/change-password':
+        $becarioController->adminChangePassword();
+        break;
+
+    case '/admin/reset-password':
+        $becarioController->adminResetPassword();
+        break;
+
+    case '/admin/create-account':
+        $becarioController->adminCreateAccount();
+        break;
+
     default:
         http_response_code(404);
         echo "404 - Página no encontrada";

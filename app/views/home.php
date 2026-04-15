@@ -112,6 +112,13 @@
 
                 </button>
 
+                <div class="flex items-center justify-center pt-1">
+                    <a href="<?= htmlspecialchars($forgotPasswordUrl ?? '#') ?>"
+                        class="text-sm font-semibold text-blue-700 hover:text-blue-800 hover:underline">
+                        ¿Olvidaste tu contraseña?
+                    </a>
+                </div>
+
             </form>
 
             <p class="text-gray-700 leading-relaxed mt-6">

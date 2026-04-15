@@ -112,4 +112,87 @@ class Becario
             return null;
         }
     }
+
+    /**
+     * Resetea la contraseña de login a la cédula del estudiante.
+     * @param string $cedula
+     * @return bool
+     */
+    public function resetearContraseniaLoginPorCedula($cedula)
+    {
+        try {
+            $hash = $this->hashPassword($cedula);
+            $stmt = $this->pdo->prepare("UPDATE usuarios SET contrasenia_login = ? WHERE cedula = ?");
+            return $stmt->execute([$hash, $cedula]);
+        } catch (PDOException $e) {
+            error_log("Error al resetear contraseña de login: " . $e->getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Obtiene estadísticas generales de estudiantes.
+     * @return array
+     */
+    public function obtenerResumenDashboard()
+    {
+        try {
+            $sql = "SELECT
+                        COUNT(*) AS total_estudiantes,
+                        SUM(CASE WHEN COALESCE(ciudad, '') <> '' AND COALESCE(provincia, '') <> '' THEN 1 ELSE 0 END) AS perfiles_completos,
+                        SUM(CASE WHEN COALESCE(ciudad, '') = '' OR COALESCE(provincia, '') = '' THEN 1 ELSE 0 END) AS perfiles_pendientes
+                    FROM usuarios";
+
+            $stmt = $this->pdo->query($sql);
+            $row = $stmt ? $stmt->fetch(PDO::FETCH_ASSOC) : null;
+
+            return [
+                'total_estudiantes' => (int) ($row['total_estudiantes'] ?? 0),
+                'perfiles_completos' => (int) ($row['perfiles_completos'] ?? 0),
+                'perfiles_pendientes' => (int) ($row['perfiles_pendientes'] ?? 0),
+            ];
+        } catch (PDOException $e) {
+            error_log("Error al obtener resumen de dashboard: " . $e->getMessage());
+            return [
+                'total_estudiantes' => 0,
+                'perfiles_completos' => 0,
+                'perfiles_pendientes' => 0,
+            ];
+        }
+    }
+
+    /**
+     * Obtiene estado de contraseñas de login.
+     * @return array
+     */
+    public function obtenerEstadoContrasenias()
+    {
+        try {
+            // Evitar password_verify por cada fila: en tablas grandes provoca timeouts.
+            // Aquí reportamos contraseñas configuradas vs sin contraseña de login.
+            $sql = "SELECT
+                        COUNT(*) AS total,
+                        SUM(CASE WHEN COALESCE(contrasenia_login, '') = '' THEN 1 ELSE 0 END) AS sin_password
+                    FROM usuarios";
+            $stmt = $this->pdo->query($sql);
+            $row = $stmt ? $stmt->fetch(PDO::FETCH_ASSOC) : null;
+
+            $total = (int) ($row['total'] ?? 0);
+            $sinPassword = (int) ($row['sin_password'] ?? 0);
+            $configuradas = max(0, $total - $sinPassword);
+
+            return [
+                'contrasenias_iniciales' => 0,
+                'contrasenias_personalizadas' => $configuradas,
+                'sin_password_login' => $sinPassword,
+            ];
+        } catch (PDOException $e) {
+            error_log("Error al obtener estado de contraseñas: " . $e->getMessage());
+            return [
+                'contrasenias_iniciales' => 0,
+                'contrasenias_personalizadas' => 0,
+                'sin_password_login' => 0,
+            ];
+        }
+    }
 }
