@@ -49,6 +49,12 @@ function h($value)
                   shadow-lg transform transition-all duration-300 hover:scale-105 focus:outline-none focus:ring-4 focus:ring-[#a7f3d0]">
                     <i class="bi bi-whatsapp text-2xl mr-3"></i> Entrar a Whatsapp
                 </a>
+
+                <a href="<?= h($changePasswordUrl ?? '#') ?>"
+                    class="inline-flex items-center justify-center bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 px-6 rounded-full
+                  shadow-lg transform transition-all duration-300 hover:scale-105 focus:outline-none focus:ring-4 focus:ring-orange-300">
+                    <i class="bi bi-key-fill text-2xl mr-3"></i> Cambiar Contraseña
+                </a>
             </div>
         </div>
 

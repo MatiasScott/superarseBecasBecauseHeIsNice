@@ -55,7 +55,7 @@
 
             </p>
 
-            <h2 class="text-2xl font-bold text-gray-800 mt-8 mb-4">Buscar por cédula 🔎</h2>
+            <h2 class="text-2xl font-bold text-gray-800 mt-8 mb-4">Inicia sesión 🔐</h2>
 
             <form id="buscar-form" class="space-y-4">
 
@@ -77,13 +77,40 @@
 
                 </div>
 
+                <div>
+
+                    <label for="password" class="block text-gray-700 text-sm font-bold mb-2">Contraseña:</label>
+
+                    <div class="relative">
+                        <input type="password" name="password" id="password" required
+
+                            class="shadow appearance-none border rounded-lg w-full py-3 px-4 pr-12 text-gray-700 leading-tight
+
+                        focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+
+                            placeholder="Ingresa tu contraseña de acceso">
+
+                        <button type="button" id="toggle-password"
+                            class="absolute inset-y-0 right-0 px-4 text-gray-500 hover:text-gray-700 transition-colors duration-200">
+                            <i class="bi bi-eye"></i>
+                        </button>
+                    </div>
+
+                    <div id="password-error-message" class="text-red-500 text-sm mt-2 hidden"></div>
+
+                    <p class="text-sm text-gray-500 mt-2">
+                        Si es tu primer ingreso, tu contraseña inicial es tu misma cédula.
+                    </p>
+
+                </div>
+
                 <button type="submit" name="buscar"
 
                     class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg
 
                 focus:outline-none focus:shadow-outline transition-all duration-200 transform hover:scale-105 w-full md:w-auto">
 
-                    Buscar
+                    Ingresar
 
                 </button>
 

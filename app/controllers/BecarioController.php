@@ -28,13 +28,33 @@ class BecarioController
         require BASE_PATH . '/app/views/home.php';
     }
 
-    // Método principal que maneja la búsqueda de un becario por cédula
-    public function buscar()
+    public function panel()
+    {
+        $cedula = (string) ($_SESSION['authorized_cedula'] ?? '');
+
+        if ($cedula === '' || !preg_match('/^\d{10}$/', $cedula)) {
+            header('Location: ' . $this->url('/'));
+            exit;
+        }
+
+        $becarioModel = new Becario($this->pdo);
+        $registro = $becarioModel->buscarPorCedula($cedula);
+
+        if (!$registro) {
+            session_unset();
+            header('Location: ' . $this->url('/'));
+            exit;
+        }
+
+        $this->renderPanel($registro);
+    }
+
+    public function login()
     {
         header('Content-Type: application/json');
 
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-            http_response_code(405); // Método no permitido
+            http_response_code(405);
             echo json_encode(['success' => false, 'error' => 'Método de solicitud no válido.']);
             return;
         }
@@ -46,8 +66,15 @@ class BecarioController
         }
 
         if (!isset($_POST['cedula']) || !preg_match('/^\d{10}$/', trim($_POST['cedula']))) {
-            http_response_code(400); // Bad Request
+            http_response_code(400);
             echo json_encode(['success' => false, 'error' => 'Por favor, ingresa una cédula válida de 10 dígitos.']);
+            return;
+        }
+
+        $password = (string) ($_POST['password'] ?? '');
+        if ($password === '') {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'error' => 'Ingresa tu contraseña para continuar.']);
             return;
         }
 
@@ -55,38 +82,62 @@ class BecarioController
         $becarioModel = new Becario($this->pdo);
         $becarioData = $becarioModel->buscarPorCedula($cedula);
 
-        if ($becarioData) {
-            $_SESSION['authorized_cedula'] = $cedula;
-
-            $data = [
-                'becario' => $becarioData,
-                'provincias' => $this->getProvincias(),
-            ];
-
-            $csrfToken = $this->ensureCsrfToken();
-            $formAction = $this->url('/becario/procesar');
-
-            ob_start();
-            require BASE_PATH . '/app/views/becario_form.php';
-            $html = ob_get_clean();
-
-            echo json_encode([
-                'success' => true,
-                'data' => $data,
-                'html' => $html,
-            ]);
-        } else {
-            http_response_code(404); // No encontrado
+        // Usuario no encontrado → mostrar vista becario_not_found en modal
+        if (!$becarioData) {
             ob_start();
             require BASE_PATH . '/app/views/becario_not_found.php';
             $html = ob_get_clean();
-
-            echo json_encode([
-                'success' => false,
-                'error' => 'El becario con la cédula proporcionada no fue encontrado.',
-                'html' => $html,
-            ]);
+            echo json_encode(['success' => false, 'html' => $html]);
+            return;
         }
+
+        // Inicializar contrasenia_login si es NULL (primer acceso al sistema)
+        if (!$this->ensureLoginPassword($becarioModel, $becarioData, $cedula)) {
+            http_response_code(500);
+            echo json_encode(['success' => false, 'error' => 'No fue posible preparar tu acceso. Intenta nuevamente.']);
+            return;
+        }
+
+        // Verificar contraseña
+        if (!$becarioModel->verifyPassword($password, (string) $becarioData['contrasenia_login'])) {
+            echo json_encode(['success' => false, 'error' => 'Cédula o contraseña incorrecta.']);
+            return;
+        }
+
+        $_SESSION['authorized_cedula'] = $cedula;
+        $csrfToken = $this->ensureCsrfToken();
+
+        // Detectar primer ingreso: contraseña aún es la cédula (sin cambiar)
+        if ($becarioModel->verifyPassword($cedula, (string) $becarioData['contrasenia_login'])) {
+            $changePasswordUrl = $this->url('/becario/change-password');
+            ob_start();
+            require BASE_PATH . '/app/views/change_password_modal.php';
+            $html = ob_get_clean();
+            echo json_encode(['success' => true, 'require_change' => true, 'html' => $html]);
+            return;
+        }
+
+        // Flujo normal: si ya completó ciudad/provincia → ir al panel
+        if (!empty($becarioData['ciudad']) && !empty($becarioData['provincia'])) {
+            echo json_encode(['success' => true, 'redirect' => $this->url('/becario/panel')]);
+            return;
+        }
+
+        // Flujo normal: mostrar formulario de datos
+        $data = ['becario' => $becarioData, 'provincias' => $this->getProvincias()];
+        $formAction = $this->url('/becario/procesar');
+
+        ob_start();
+        require BASE_PATH . '/app/views/becario_form.php';
+        $html = ob_get_clean();
+
+        echo json_encode(['success' => true, 'html' => $html]);
+    }
+
+    // Compatibilidad con la ruta anterior.
+    public function buscar()
+    {
+        $this->login();
     }
 
     // Método para procesar la actualización de datos del becario
@@ -147,26 +198,7 @@ class BecarioController
             return;
         }
 
-        $certificadoModel = new Certificado($this->pdo);
-        $certificados_encontrados = $certificadoModel->getCertificadosByCedula($cedula);
-        $niveles_deseados = self::ALLOWED_LEVELS;
-        $data = $registro;
-        $assetCssPath = $this->assetPath('/assets/css/styles.css');
-        $videoBecaInglesUrl = $this->assetPath('/assets/videos/becaIngles.mp4');
-        $videoMoodleUrl = $this->assetPath('/assets/videos/tutorialMoodle.mp4');
-        $videoZoomUrl = $this->assetPath('/assets/videos/tutorialZoom.mp4');
-
-        $certificadosVista = [];
-        foreach ($niveles_deseados as $nivel) {
-            $ruta = $certificados_encontrados[$nivel] ?? null;
-            $certificadosVista[] = [
-                'nivel' => $nivel,
-                'disponible' => $ruta !== null,
-                'url' => $ruta !== null ? $this->url('/becario/descargar?ruta=' . rawurlencode($ruta)) : null,
-            ];
-        }
-
-        require BASE_PATH . '/app/views/registro_exitoso.php';
+        $this->renderPanel($registro);
     }
 
     // Método para procesar la subida de un certificado
@@ -351,6 +383,53 @@ class BecarioController
         return isset($_SESSION['authorized_cedula']) && hash_equals((string) $_SESSION['authorized_cedula'], $cedula);
     }
 
+    private function ensureLoginPassword(Becario $becarioModel, array &$becarioData, string $cedula): bool
+    {
+        if (!empty($becarioData['contrasenia_login'])) {
+            return true;
+        }
+
+        $initialPassword = $becarioModel->hashPassword($cedula);
+        if (!$becarioModel->updatePassword($cedula, $initialPassword)) {
+            return false;
+        }
+
+        $becarioData['contrasenia_login'] = $initialPassword;
+        return true;
+    }
+
+    private function renderPanel(array $registro): void
+    {
+        $cedula = (string) ($registro['cedula'] ?? '');
+        if ($cedula === '' || !$this->isAuthorizedCedula($cedula)) {
+            http_response_code(403);
+            echo 'No tienes autorización para acceder a este registro.';
+            return;
+        }
+
+        $certificadoModel = new Certificado($this->pdo);
+        $certificados_encontrados = $certificadoModel->getCertificadosByCedula($cedula);
+        $niveles_deseados = self::ALLOWED_LEVELS;
+        $data = $registro;
+        $assetCssPath = $this->assetPath('/assets/css/styles.css');
+        $videoBecaInglesUrl = $this->assetPath('/assets/videos/becaIngles.mp4');
+        $videoMoodleUrl = $this->assetPath('/assets/videos/tutorialMoodle.mp4');
+        $videoZoomUrl = $this->assetPath('/assets/videos/tutorialZoom.mp4');
+        $changePasswordUrl = $this->url('/becario/change-password');
+
+        $certificadosVista = [];
+        foreach ($niveles_deseados as $nivel) {
+            $ruta = $certificados_encontrados[$nivel] ?? null;
+            $certificadosVista[] = [
+                'nivel' => $nivel,
+                'disponible' => $ruta !== null,
+                'url' => $ruta !== null ? $this->url('/becario/descargar?ruta=' . rawurlencode($ruta)) : null,
+            ];
+        }
+
+        require BASE_PATH . '/app/views/registro_exitoso.php';
+    }
+
     private function url(string $path): string
     {
         return $this->baseUrl() . $path;
@@ -375,5 +454,163 @@ class BecarioController
             "Pichincha", "Santa Elena", "Santo Domingo de los Tsáchilas",
             "Sucumbíos", "Tungurahua", "Zamora Chinchipe"
         ];
+    }
+
+    /**
+     * Valida que una contraseña cumpla con los requisitos de seguridad.
+     * Requisitos:
+     * - Mínimo 8 caracteres
+     * - Al menos una letra minúscula
+     * - Al menos una letra mayúscula
+     * - Al menos un carácter especial
+     * 
+     * @param string $password La contraseña a validar.
+     * @return array Un array con 'valid' => bool y 'message' => string.
+     */
+    private function validatePasswordRequirements($password)
+    {
+        $errors = [];
+
+        if (strlen($password) < 8) {
+            $errors[] = 'La contraseña debe tener al menos 8 caracteres.';
+        }
+
+        if (!preg_match('/[a-z]/', $password)) {
+            $errors[] = 'La contraseña debe contener al menos una letra minúscula.';
+        }
+
+        if (!preg_match('/[A-Z]/', $password)) {
+            $errors[] = 'La contraseña debe contener al menos una letra mayúscula.';
+        }
+
+        if (!preg_match('/[!@#$%^&*()_+\-=\[\]{};:\'",.<>?\/\\|`~]/', $password)) {
+            $errors[] = 'La contraseña debe contener al menos un carácter especial.';
+        }
+
+        if (!empty($errors)) {
+            return [
+                'valid' => false,
+                'message' => implode(' ', $errors)
+            ];
+        }
+
+        return ['valid' => true, 'message' => ''];
+    }
+
+    /**
+     * Procesa el cambio de contraseña del becario.
+     */
+    public function changePassword()
+    {
+        // GET: Renderizar formulario de cambio de contraseña
+        if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+            if (!isset($_SESSION['authorized_cedula'])) {
+                header('Location: ' . $this->baseUrl() . '/');
+                exit;
+            }
+
+            $cedula = (string) $_SESSION['authorized_cedula'];
+            $csrfToken = $this->ensureCsrfToken();
+            $assetCssPath = $this->assetPath('/assets/css/styles.css');
+            $basePath = $this->baseUrl();
+            $changePasswordUrl = $this->url('/becario/change-password');
+            $registroUrl = $this->url('/becario/panel');
+
+            require BASE_PATH . '/app/views/change_password.php';
+            return;
+        }
+
+        // POST: Procesar cambio de contraseña
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            http_response_code(405);
+            echo json_encode(['success' => false, 'error' => 'Método de solicitud no válido.']);
+            return;
+        }
+
+        header('Content-Type: application/json');
+
+        if (!$this->isValidCsrf()) {
+            http_response_code(419);
+            echo json_encode(['success' => false, 'error' => 'La sesión expiró. Recarga la página e intenta nuevamente.']);
+            return;
+        }
+
+        $cedula = trim((string) ($_POST['cedula'] ?? ''));
+        $currentPassword = (string) ($_POST['current_password'] ?? '');
+        $newPassword = (string) ($_POST['new_password'] ?? '');
+
+        if (!$cedula || $currentPassword === '' || $newPassword === '') {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'error' => 'Faltan datos requeridos.']);
+            return;
+        }
+
+        if (!preg_match('/^\d{10}$/', $cedula)) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'error' => 'La cédula proporcionada no es válida.']);
+            return;
+        }
+
+        if (!$this->isAuthorizedCedula($cedula)) {
+            http_response_code(403);
+            echo json_encode(['success' => false, 'error' => 'No tienes autorización para cambiar la contraseña.']);
+            return;
+        }
+
+        $becarioModel = new Becario($this->pdo);
+        $becarioData = $becarioModel->buscarPorCedula($cedula);
+
+        if (!$becarioData) {
+            http_response_code(404);
+            echo json_encode(['success' => false, 'error' => 'Usuario no encontrado.']);
+            return;
+        }
+
+        // Verificar contraseña actual
+        if (!$becarioModel->verifyPassword($currentPassword, (string) $becarioData['contrasenia_login'])) {
+            http_response_code(401);
+            echo json_encode(['success' => false, 'error' => 'La contraseña actual es incorrecta.']);
+            return;
+        }
+
+        $validation = $this->validatePasswordRequirements($newPassword);
+        if (!$validation['valid']) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'error' => $validation['message']]);
+            return;
+        }
+
+        $passwordHash = $becarioModel->hashPassword($newPassword);
+
+        if (!$becarioModel->updatePassword($cedula, $passwordHash)) {
+            http_response_code(500);
+            echo json_encode(['success' => false, 'error' => 'Error al actualizar la contraseña.']);
+            return;
+        }
+
+        // Determinar el paso siguiente después del cambio exitoso
+        if (!empty($becarioData['ciudad']) && !empty($becarioData['provincia'])) {
+            echo json_encode([
+                'success' => true,
+                'message' => '¡Contraseña actualizada correctamente!',
+                'redirect' => $this->url('/becario/panel'),
+            ]);
+            return;
+        }
+
+        // Aún falta completar ciudad/provincia → mostrar becario_form
+        $csrfToken = $this->ensureCsrfToken();
+        $data = ['becario' => $becarioData, 'provincias' => $this->getProvincias()];
+        $formAction = $this->url('/becario/procesar');
+
+        ob_start();
+        require BASE_PATH . '/app/views/becario_form.php';
+        $html = ob_get_clean();
+
+        echo json_encode([
+            'success' => true,
+            'message' => '¡Contraseña actualizada correctamente!',
+            'html' => $html,
+        ]);
     }
 }

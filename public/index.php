@@ -53,6 +53,14 @@ switch ($uri) {
     case '/becario/buscar':
         $becarioController->buscar();
         break;
+
+    case '/becario/login':
+        $becarioController->login();
+        break;
+
+    case '/becario/panel':
+        $becarioController->panel();
+        break;
     
     case '/becario/procesar':
         $becarioController->procesar();
@@ -64,6 +72,10 @@ switch ($uri) {
         
     case '/becario/descargar':
         $becarioController->descargar();
+        break;
+
+    case '/becario/change-password':
+        $becarioController->changePassword();
         break;
 
     default:

@@ -30,6 +30,44 @@ class Becario
     }
 
     /**
+     * Hashea una contraseña usando bcrypt.
+     * @param string $password La contraseña a hashear.
+     * @return string La contraseña hasheada.
+     */
+    public function hashPassword($password)
+    {
+        return password_hash($password, PASSWORD_DEFAULT);
+    }
+
+    /**
+     * Verifica si una contraseña coincide con su hash.
+     * @param string $password La contraseña a verificar.
+     * @param string $hash El hash almacenado.
+     * @return bool True si la contraseña es correcta, false si no.
+     */
+    public function verifyPassword($password, $hash)
+    {
+        return password_verify($password, $hash);
+    }
+
+    /**
+     * Actualiza la contraseña de login del becario.
+     * @param string $cedula La cédula del becario.
+     * @param string $passwordHash La contraseña hasheada.
+     * @return bool True si la actualización fue exitosa, false si no.
+     */
+    public function updatePassword($cedula, $passwordHash)
+    {
+        try {
+            $stmt = $this->pdo->prepare("UPDATE usuarios SET contrasenia_login = ? WHERE cedula = ?");
+            return $stmt->execute([$passwordHash, $cedula]);
+        } catch (PDOException $e) {
+            error_log("Error al actualizar contraseña de login: " . $e->getMessage());
+            return false;
+        }
+    }
+
+    /**
      * Actualiza la ciudad y provincia del becario y obtiene toda la información necesaria.
      * @param string $cedula La cédula del becario.
      * @param string $ciudad La nueva ciudad.
