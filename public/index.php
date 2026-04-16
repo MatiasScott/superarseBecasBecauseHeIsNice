@@ -11,6 +11,7 @@ if (session_status() === PHP_SESSION_NONE) {
 header('X-Content-Type-Options: nosniff');
 header('X-Frame-Options: SAMEORIGIN');
 header('Referrer-Policy: no-referrer-when-downgrade');
+header("Content-Security-Policy: default-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com; script-src-elem 'self' 'unsafe-inline' https://cdn.tailwindcss.com; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src-elem 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data: https:; font-src 'self' data: https://cdn.jsdelivr.net; media-src 'self' data:; connect-src 'self';");
 
 define('BASE_PATH', dirname(__DIR__));
 

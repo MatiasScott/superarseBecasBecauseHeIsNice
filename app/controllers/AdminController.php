@@ -37,6 +37,7 @@ class AdminController
                 if (!$admin || !$adminModel->verifyPassword($password, (string) ($admin['contrasenia_login'] ?? ''))) {
                     $error = 'Credenciales invalidas.';
                 } else {
+                    session_regenerate_id(true);
                     $_SESSION['admin_id'] = (int) $admin['id'];
                     $_SESSION['admin_usuario'] = (string) $admin['usuario'];
 
@@ -615,8 +616,19 @@ class AdminController
             return;
         }
 
+        $uploadsBase = realpath(BASE_PATH . '/uploads');
+        $rutaRealNorm = str_replace('\\', '/', (string) $rutaReal);
+        $uploadsBaseNorm = $uploadsBase ? (rtrim(str_replace('\\', '/', $uploadsBase), '/') . '/') : '';
+        if ($uploadsBaseNorm === '' || strpos($rutaRealNorm, $uploadsBaseNorm) !== 0) {
+            http_response_code(403);
+            echo 'Ruta de archivo no permitida.';
+            return;
+        }
+
+        $safeFilename = str_replace(["\r", "\n", '"'], '', basename($rutaReal));
+
         header('Content-Type: application/pdf');
-        header('Content-Disposition: inline; filename="' . basename($rutaReal) . '"');
+        header('Content-Disposition: inline; filename="' . $safeFilename . '"');
         header('Content-Length: ' . filesize($rutaReal));
         header('X-Content-Type-Options: nosniff');
         readfile($rutaReal);
@@ -844,7 +856,19 @@ class AdminController
 
     private function isAdminAuthenticated(): bool
     {
-        return isset($_SESSION['admin_id']) && (int) $_SESSION['admin_id'] > 0;
+        $adminId = (int) ($_SESSION['admin_id'] ?? 0);
+        if ($adminId <= 0) {
+            return false;
+        }
+
+        try {
+            $stmt = $this->pdo->prepare('SELECT id FROM admins WHERE id = ? AND activo = 1 LIMIT 1');
+            $stmt->execute([$adminId]);
+            return (bool) $stmt->fetch(PDO::FETCH_ASSOC);
+        } catch (PDOException $e) {
+            error_log('Error al validar sesion admin: ' . $e->getMessage());
+            return false;
+        }
     }
 
     private function validatePasswordRequirements($password)

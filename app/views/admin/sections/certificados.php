@@ -347,7 +347,7 @@ document.getElementById('bulkUploadForm').addEventListener('submit', async funct
 
     try {
         // Primera solicitud: obtener total de archivos
-        const respInicio = await fetch('<?= $bulkUploadAction ?? "#" ?>', {
+        const respInicio = await fetch('<?= h($bulkUploadAction ?? "#") ?>', {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
             body: new URLSearchParams({
@@ -375,7 +375,7 @@ document.getElementById('bulkUploadForm').addEventListener('submit', async funct
         // Procesar en chunks de 100
         const chunkSize = 100;
         while (offset < totalArchivos) {
-            const respChunk = await fetch('<?= $bulkUploadAction ?? "#" ?>', {
+            const respChunk = await fetch('<?= h($bulkUploadAction ?? "#") ?>', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                 body: new URLSearchParams({

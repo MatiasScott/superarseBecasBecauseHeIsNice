@@ -119,7 +119,7 @@ class Certificado
             $params = $busqueda !== '' ? [$like, $like, $like] : [];
 
             $sqlTotal = "SELECT COUNT(*) FROM certificados c
-                         LEFT JOIN usuarios u ON c.cedula = u.cedula
+                         LEFT JOIN usuarios u ON BINARY c.cedula = BINARY u.cedula
                          $where";
             $stmtT = $this->pdo->prepare($sqlTotal);
             $stmtT->execute($params);
@@ -128,7 +128,7 @@ class Certificado
             $sqlData = "SELECT c.cedula, c.nivel, c.ruta_archivo, c.fecha_subida,
                                u.nombres, u.apellidos
                         FROM certificados c
-                        LEFT JOIN usuarios u ON c.cedula = u.cedula
+                       LEFT JOIN usuarios u ON BINARY c.cedula = BINARY u.cedula
                         $where
                         ORDER BY c.fecha_subida DESC
                         LIMIT {$porPagina} OFFSET {$offset}";

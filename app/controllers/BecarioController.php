@@ -10,6 +10,8 @@ class BecarioController
     private const MAX_UPLOAD_SIZE = 5242880; // 5 MB
     private const ALLOWED_UPLOAD_MIME = 'application/pdf';
     private const ALLOWED_LEVELS = ['A1', 'A2', 'B1', 'B2'];
+    private const LOGIN_MAX_ATTEMPTS = 5;
+    private const LOGIN_WINDOW_SECONDS = 300;
 
     public function __construct()
     {
@@ -161,15 +163,23 @@ class BecarioController
         }
 
         $cedula = trim($_POST['cedula']);
+
+        if ($this->isLoginRateLimited($cedula)) {
+            http_response_code(429);
+            echo json_encode([
+                'success' => false,
+                'error' => 'Demasiados intentos. Intenta nuevamente en unos minutos.',
+            ]);
+            return;
+        }
+
         $becarioModel = new Becario($this->pdo);
         $becarioData = $becarioModel->buscarPorCedula($cedula);
 
-        // Usuario no encontrado → mostrar vista becario_not_found en modal
+        // Respuesta genérica para evitar enumeración de cédulas.
         if (!$becarioData) {
-            ob_start();
-            require BASE_PATH . '/app/views/student/becario_not_found.php';
-            $html = ob_get_clean();
-            echo json_encode(['success' => false, 'html' => $html]);
+            $this->registerLoginFailure($cedula);
+            echo json_encode(['success' => false, 'error' => 'Cédula o contraseña incorrecta.']);
             return;
         }
 
@@ -182,10 +192,13 @@ class BecarioController
 
         // Verificar contraseña
         if (!$becarioModel->verifyPassword($password, (string) $becarioData['contrasenia_login'])) {
+            $this->registerLoginFailure($cedula);
             echo json_encode(['success' => false, 'error' => 'Cédula o contraseña incorrecta.']);
             return;
         }
 
+        $this->clearLoginFailures($cedula);
+        session_regenerate_id(true);
         $_SESSION['authorized_cedula'] = $cedula;
         $csrfToken = $this->ensureCsrfToken();
 
@@ -330,9 +343,20 @@ class BecarioController
             exit;
         }
 
+        $uploadsBase = realpath(BASE_PATH . '/uploads');
+        $rutaRealNorm = str_replace('\\', '/', (string) $rutaReal);
+        $uploadsBaseNorm = $uploadsBase ? (rtrim(str_replace('\\', '/', $uploadsBase), '/') . '/') : '';
+        if ($uploadsBaseNorm === '' || strpos($rutaRealNorm, $uploadsBaseNorm) !== 0) {
+            http_response_code(403);
+            echo "Error: Ruta de archivo no permitida.";
+            exit;
+        }
+
+        $safeFilename = str_replace(["\r", "\n", '"'], '', basename($rutaReal));
+
         header('Content-Description: File Transfer');
         header('Content-Type: application/pdf');
-        header('Content-Disposition: attachment; filename="' . basename($rutaReal) . '"');
+        header('Content-Disposition: attachment; filename="' . $safeFilename . '"');
         header('Expires: 0');
         header('Cache-Control: must-revalidate');
         header('Pragma: public');
@@ -375,6 +399,55 @@ class BecarioController
     private function isAuthorizedCedula(string $cedula): bool
     {
         return isset($_SESSION['authorized_cedula']) && hash_equals((string) $_SESSION['authorized_cedula'], $cedula);
+    }
+
+    private function getClientIp(): string
+    {
+        $ip = (string) ($_SERVER['REMOTE_ADDR'] ?? 'unknown');
+        return $ip !== '' ? $ip : 'unknown';
+    }
+
+    private function getLoginAttemptKey(string $cedula): string
+    {
+        return $this->getClientIp() . '|' . $cedula;
+    }
+
+    private function isLoginRateLimited(string $cedula): bool
+    {
+        $key = $this->getLoginAttemptKey($cedula);
+        $attempts = $_SESSION['login_attempts'][$key] ?? [];
+
+        if (!is_array($attempts)) {
+            return false;
+        }
+
+        $ahora = time();
+        $vigentes = array_values(array_filter($attempts, static function ($ts) use ($ahora) {
+            return is_int($ts) && ($ahora - $ts) <= self::LOGIN_WINDOW_SECONDS;
+        }));
+
+        $_SESSION['login_attempts'][$key] = $vigentes;
+        return count($vigentes) >= self::LOGIN_MAX_ATTEMPTS;
+    }
+
+    private function registerLoginFailure(string $cedula): void
+    {
+        $key = $this->getLoginAttemptKey($cedula);
+        $attempts = $_SESSION['login_attempts'][$key] ?? [];
+        if (!is_array($attempts)) {
+            $attempts = [];
+        }
+
+        $attempts[] = time();
+        $_SESSION['login_attempts'][$key] = $attempts;
+    }
+
+    private function clearLoginFailures(string $cedula): void
+    {
+        $key = $this->getLoginAttemptKey($cedula);
+        if (isset($_SESSION['login_attempts'][$key])) {
+            unset($_SESSION['login_attempts'][$key]);
+        }
     }
 
     private function ensureLoginPassword(Becario $becarioModel, array &$becarioData, string $cedula): bool
