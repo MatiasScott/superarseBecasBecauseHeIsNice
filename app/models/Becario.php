@@ -174,7 +174,9 @@ class Becario
 
             $limite = max(1, min(200, (int) $limite));
 
-            $soloPendientes = !isset($filtros['solo_pendientes']) || (int) $filtros['solo_pendientes'] === 1;
+            // Si la clave no existe en $filtros (llamada sin parámetros), mostrar todos.
+            // Solo filtrar por pendientes cuando el valor sea explícitamente 1.
+            $soloPendientes = isset($filtros['solo_pendientes']) && (int) $filtros['solo_pendientes'] === 1;
             $fechaDesde = trim((string) ($filtros['fecha_desde'] ?? ''));
             $fechaHasta = trim((string) ($filtros['fecha_hasta'] ?? ''));
 
@@ -210,7 +212,7 @@ class Becario
                            u.nombres, u.apellidos,
                            a.usuario AS atendido_por_usuario
                     FROM solicitudes_reset_contrasenia s
-                    LEFT JOIN usuarios u ON u.cedula = s.cedula
+                    LEFT JOIN usuarios u ON u.cedula COLLATE utf8mb4_unicode_ci = s.cedula
                     LEFT JOIN admins a ON a.id = s.atendido_por_admin_id
                     {$whereSql}
                     ORDER BY s.solicitado_en DESC, s.id DESC

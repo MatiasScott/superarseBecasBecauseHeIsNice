@@ -119,35 +119,232 @@
             </table>
         </div>
     </div>
-</section>
+
+<!-- SUBIDA INDIVIDUAL DE CERTIFICADO -->
+<div class="rounded-2xl border border-gray-200 p-5 space-y-4">
+    <h3 class="text-xl font-bold text-gray-800 flex items-center gap-2">
+        <i class="bi bi-file-earmark-arrow-up"></i> Subir certificado individual
+    </h3>
+    <p class="text-sm text-gray-600">Sube un PDF de certificado para un estudiante específico.</p>
+
+    <form id="uploadIndividualForm" class="space-y-4">
+        <input type="hidden" name="_csrf" value="<?= h($csrfToken ?? '') ?>">
+
+        <div class="grid md:grid-cols-3 gap-4">
+            <div>
+                <label for="cedula_individual" class="block text-sm font-semibold text-gray-700 mb-1">Cédula del estudiante</label>
+                <input id="cedula_individual" name="cedula" type="text" required maxlength="10" pattern="\d{10}" placeholder="Ej: 1234567890"
+                    class="w-full border rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-green-500">
+            </div>
+            <div>
+                <label for="nivel_individual" class="block text-sm font-semibold text-gray-700 mb-1">Nivel</label>
+                <select id="nivel_individual" name="nivel" required
+                    class="w-full border rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-green-500">
+                    <option value="">-- Selecciona un nivel --</option>
+                    <?php foreach (($niveles ?? []) as $n) : ?>
+                        <option value="<?= h($n) ?>"><?= h($n) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div>
+                <label for="archivo_individual" class="block text-sm font-semibold text-gray-700 mb-1">Archivo PDF</label>
+                <input id="archivo_individual" name="certificado" type="file" accept=".pdf" required
+                    class="w-full border rounded-lg px-4 py-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-green-500">
+            </div>
+        </div>
+
+        <div class="flex items-center gap-3">
+            <button type="submit" id="btnSubirIndividual"
+                class="bg-green-600 hover:bg-green-700 text-white font-semibold px-6 py-2.5 rounded-lg flex items-center gap-2 transition-colors">
+                <i class="bi bi-upload"></i> Subir certificado
+            </button>
+        </div>
+
+        <div id="uploadIndividualMsg" class="hidden text-sm font-semibold p-3 rounded-lg"></div>
+    </form>
+</div>
+
+<!-- LISTADO DE CERTIFICADOS -->
+<div class="rounded-2xl border border-gray-200 p-5 space-y-4">
+    <h3 class="text-xl font-bold text-gray-800 flex items-center gap-2">
+        <i class="bi bi-card-list"></i> Certificados registrados
+    </h3>
+
+    <!-- Buscador -->
+    <div class="flex flex-col sm:flex-row gap-3">
+        <input id="certSearch" type="text" placeholder="Buscar por cédula, nombre o apellido..."
+            class="flex-1 border rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-gray-400 text-sm">
+        <button id="btnBuscarCerts" class="bg-gray-700 hover:bg-gray-800 text-white font-semibold px-5 py-2.5 rounded-lg text-sm transition-colors flex items-center gap-2">
+            <i class="bi bi-search"></i> Buscar
+        </button>
+    </div>
+
+    <!-- Tabla -->
+    <div class="overflow-x-auto rounded-xl border border-gray-200">
+        <table class="w-full text-sm">
+            <thead class="bg-gray-50 text-gray-600 uppercase text-xs">
+                <tr>
+                    <th class="px-4 py-3 text-left">Cédula</th>
+                    <th class="px-4 py-3 text-left">Estudiante</th>
+                    <th class="px-4 py-3 text-left">Nivel</th>
+                    <th class="px-4 py-3 text-left">Fecha subida</th>
+                    <th class="px-4 py-3 text-center">Archivo</th>
+                </tr>
+            </thead>
+            <tbody id="certTableBody" class="divide-y divide-gray-100">
+                <tr><td colspan="5" class="text-center py-8 text-gray-400">Cargando...</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Paginación -->
+    <div id="certPaginacion" class="flex items-center justify-between text-sm text-gray-600 pt-1"></div>
+</div>
+
+<script>
+(function () {
+    const API_URL = '<?= h($listarCertificadosUrl ?? '') ?>';
+    const VER_URL = '<?= h($verCertificadoUrl ?? '') ?>';
+    let paginaActual = 1;
+    let busquedaActual = '';
+
+    function cargarCertificados(pagina, busqueda) {
+        paginaActual = pagina;
+        busquedaActual = busqueda;
+
+        const tbody = document.getElementById('certTableBody');
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center py-8 text-gray-400">Cargando...</td></tr>';
+
+        const params = new URLSearchParams({ pagina, q: busqueda });
+        fetch(API_URL + '?' + params.toString())
+            .then(r => r.json())
+            .then(data => {
+                if (!data.success) {
+                    tbody.innerHTML = '<tr><td colspan="5" class="text-center py-6 text-red-500">Error al cargar datos.</td></tr>';
+                    return;
+                }
+                renderTabla(data.filas);
+                renderPaginacion(data.total, data.pagina, data.totalPags, data.porPagina);
+            })
+            .catch(() => {
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center py-6 text-red-500">Error de red.</td></tr>';
+            });
+    }
+
+    function renderTabla(filas) {
+        const tbody = document.getElementById('certTableBody');
+        if (!filas || filas.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5" class="text-center py-8 text-gray-400">No se encontraron certificados.</td></tr>';
+            return;
+        }
+
+        const nivelesBadge = {
+            'A1': 'bg-blue-100 text-blue-700',
+            'A2': 'bg-indigo-100 text-indigo-700',
+            'B1': 'bg-purple-100 text-purple-700',
+            'B2': 'bg-violet-100 text-violet-700',
+        };
+
+        tbody.innerHTML = filas.map(f => {
+            const nombre = [f.nombres, f.apellidos].filter(Boolean).join(' ') || '<span class="text-gray-400 italic">Sin registro</span>';
+            const fecha = f.fecha_subida ? f.fecha_subida.substring(0, 16).replace('T', ' ') : '—';
+            const badge = nivelesBadge[f.nivel] || 'bg-gray-100 text-gray-700';
+            const nombreArchivo = f.ruta_archivo ? f.ruta_archivo.split('/').pop() : null;
+            const verHref = f.ruta_archivo ? `${VER_URL}?ruta=${encodeURIComponent(f.ruta_archivo)}` : null;
+
+            return `<tr class="hover:bg-gray-50 transition-colors">
+                <td class="px-4 py-3 font-mono font-semibold text-gray-800">${esc(f.cedula)}</td>
+                <td class="px-4 py-3 text-gray-700">${nombre}</td>
+                <td class="px-4 py-3">
+                    <span class="inline-block px-2 py-0.5 rounded-full text-xs font-bold ${badge}">${esc(f.nivel)}</span>
+                </td>
+                <td class="px-4 py-3 text-gray-500">${esc(fecha)}</td>
+                <td class="px-4 py-3 text-center">
+                    ${nombreArchivo
+                        ? `<div class="flex items-center justify-center gap-2">
+                                <span class="text-xs text-gray-500 font-mono">${esc(nombreArchivo)}</span>
+                                <a href="${verHref}" target="_blank" rel="noopener noreferrer"
+                                   class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold transition-colors">
+                                   <i class="bi bi-eye"></i> Ver PDF
+                                </a>
+                           </div>`
+                        : '<span class="text-gray-400 text-xs">—</span>'}
+                </td>
+            </tr>`;
+        }).join('');
+    }
+
+    function renderPaginacion(total, pagina, totalPags, porPagina) {
+        const div = document.getElementById('certPaginacion');
+        if (total === 0) { div.innerHTML = ''; return; }
+
+        const desde = (pagina - 1) * porPagina + 1;
+        const hasta = Math.min(pagina * porPagina, total);
+
+        div.innerHTML = `
+            <span>${desde}–${hasta} de ${total} certificados</span>
+            <div class="flex gap-2">
+                <button onclick="certIrPagina(${pagina - 1})" ${pagina <= 1 ? 'disabled' : ''}
+                    class="px-3 py-1.5 rounded-lg border text-sm ${pagina <= 1 ? 'opacity-40 cursor-not-allowed' : 'hover:bg-gray-100'}">
+                    <i class="bi bi-chevron-left"></i>
+                </button>
+                <span class="px-3 py-1.5 text-sm font-semibold">${pagina} / ${totalPags}</span>
+                <button onclick="certIrPagina(${pagina + 1})" ${pagina >= totalPags ? 'disabled' : ''}
+                    class="px-3 py-1.5 rounded-lg border text-sm ${pagina >= totalPags ? 'opacity-40 cursor-not-allowed' : 'hover:bg-gray-100'}">
+                    <i class="bi bi-chevron-right"></i>
+                </button>
+            </div>`;
+    }
+
+    function esc(str) {
+        if (str == null) return '';
+        return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    window.certIrPagina = function(p) {
+        cargarCertificados(p, busquedaActual);
+    };
+
+    document.getElementById('btnBuscarCerts').addEventListener('click', function () {
+        cargarCertificados(1, document.getElementById('certSearch').value.trim());
+    });
+
+    document.getElementById('certSearch').addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') cargarCertificados(1, this.value.trim());
+    });
+
+    // Cargar al iniciar
+    cargarCertificados(1, '');
+})();
+</script>
 
 <script>
 document.getElementById('bulkUploadForm').addEventListener('submit', async function(e) {
     e.preventDefault();
-    
+
     const carpetaRuta = document.getElementById('carpeta_ruta').value.trim();
     const nivel = document.getElementById('nivel_certificado').value;
     const csrf = document.querySelector('input[name="_csrf"]').value;
-    
+
     if (!carpetaRuta || !nivel) {
         alert('Por favor completa todos los campos');
         return;
     }
-    
+
     // Mostrar progreso, esconder resultado
     document.getElementById('progressContainer').classList.remove('hidden');
     document.getElementById('resultContainer').classList.add('hidden');
     document.getElementById('btnIniciar').disabled = true;
-    
+
     const statusLog = document.getElementById('statusLog');
     statusLog.innerHTML = '<p class="text-gray-600">Iniciando proceso...</p>';
-    
+
     let offset = 0;
     let totalArchivos = 0;
     let exitosos = 0;
     let errores = 0;
     const startTime = Date.now();
-    
+
     try {
         // Primera solicitud: obtener total de archivos
         const respInicio = await fetch('<?= $bulkUploadAction ?? "#" ?>', {
@@ -160,21 +357,21 @@ document.getElementById('bulkUploadForm').addEventListener('submit', async funct
                 _csrf: csrf
             })
         });
-        
+
         const dataInicio = await respInicio.json();
         if (!dataInicio.success) {
             throw new Error(dataInicio.error || 'Error al inicializar');
         }
-        
+
         totalArchivos = dataInicio.total;
         logStatus(`📁 Se encontraron ${totalArchivos} archivos`);
-        
+
         if (totalArchivos === 0) {
             logStatus('⚠️ No hay archivos para procesar');
             showResult(exitosos, errores, startTime);
             return;
         }
-        
+
         // Procesar en chunks de 100
         const chunkSize = 100;
         while (offset < totalArchivos) {
@@ -190,29 +387,29 @@ document.getElementById('bulkUploadForm').addEventListener('submit', async funct
                     _csrf: csrf
                 })
             });
-            
+
             const dataChunk = await respChunk.json();
             if (!dataChunk.success) {
                 throw new Error(dataChunk.error || 'Error al procesar chunk');
             }
-            
+
             exitosos += dataChunk.exitosos || 0;
             errores += dataChunk.errores || 0;
-            
+
             // Actualizar progreso
             offset += chunkSize;
             const porcentaje = Math.min(100, (offset / totalArchivos) * 100);
             document.getElementById('progressBar').style.width = porcentaje + '%';
             document.getElementById('progressText').textContent = `${offset} / ${totalArchivos}`;
-            
+
             // Log de errores si los hay
             if (dataChunk.mensajes && dataChunk.mensajes.length > 0) {
                 dataChunk.mensajes.forEach(msg => logStatus(msg));
             }
         }
-        
+
         showResult(exitosos, errores, startTime);
-        
+
     } catch (error) {
         logStatus('❌ ' + error.message);
         showResult(exitosos, errores, startTime);
@@ -232,11 +429,11 @@ function logStatus(message) {
 
 function showResult(exitosos, errores, startTime) {
     const elapsed = Math.round((Date.now() - startTime) / 1000);
-    
+
     document.getElementById('successCount').textContent = exitosos;
     document.getElementById('errorCount').textContent = errores;
     document.getElementById('timeElapsed').textContent = elapsed + 's';
-    
+
     const resultContainer = document.getElementById('resultContainer');
     if (errores === 0) {
         resultContainer.className = 'hidden p-4 rounded-lg border space-y-2 bg-green-50 border-green-200';
@@ -250,3 +447,42 @@ function showResult(exitosos, errores, startTime) {
     resultContainer.classList.remove('hidden');
 }
 </script>
+
+<script>
+document.getElementById('uploadIndividualForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const btn = document.getElementById('btnSubirIndividual');
+    const msg = document.getElementById('uploadIndividualMsg');
+
+    btn.disabled = true;
+    btn.textContent = 'Subiendo...';
+    msg.className = 'hidden';
+
+    const formData = new FormData(this);
+
+    try {
+        const resp = await fetch('<?= h($uploadCertificadoAction ?? '') ?>', {
+            method: 'POST',
+            body: formData
+        });
+        const data = await resp.json();
+
+        if (data.success) {
+            msg.textContent = data.message;
+            msg.className = 'text-sm font-semibold p-3 rounded-lg bg-green-100 text-green-800 border border-green-200';
+            e.target.reset();
+        } else {
+            msg.textContent = data.error || 'Error al subir el certificado.';
+            msg.className = 'text-sm font-semibold p-3 rounded-lg bg-red-100 text-red-800 border border-red-200';
+        }
+    } catch (err) {
+        msg.textContent = 'Error de red al procesar la solicitud.';
+        msg.className = 'text-sm font-semibold p-3 rounded-lg bg-red-100 text-red-800 border border-red-200';
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-upload"></i> Subir certificado';
+    }
+});
+</script>
+
+</section>

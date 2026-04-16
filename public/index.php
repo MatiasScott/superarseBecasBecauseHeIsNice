@@ -72,10 +72,6 @@ switch ($uri) {
         $becarioController->procesar();
         break;
         
-    case '/becario/procesarSubida':
-        $becarioController->procesarSubida();
-        break;
-        
     case '/becario/descargar':
         $becarioController->descargar();
         break;
@@ -90,6 +86,10 @@ switch ($uri) {
 
     case '/admin/dashboard':
         $adminController->adminDashboard();
+        break;
+
+    case '/admin/upload-certificado':
+        $adminController->adminUploadCertificado();
         break;
 
     case '/admin/login':
@@ -122,6 +122,14 @@ switch ($uri) {
 
     case '/admin/bulk-upload-certificados':
         $adminController->adminBulkUploadCertificados();
+        break;
+
+    case '/admin/listar-certificados':
+        $adminController->adminListarCertificados();
+        break;
+
+    case '/admin/ver-certificado':
+        $adminController->adminVerCertificado();
         break;
 
     default:

@@ -213,6 +213,9 @@ class AdminController
         $createAdminAction = $adminsModulo['createAdminAction'];
         $admins = $adminsModulo['admins'] ?? [];
         $bulkUploadAction = $certificadosModulo['bulkUploadAction'];
+        $uploadCertificadoAction = $certificadosModulo['uploadCertificadoAction'];
+        $listarCertificadosUrl   = $certificadosModulo['listarCertificadosUrl'];
+        $verCertificadoUrl       = $certificadosModulo['verCertificadoUrl'];
         $homeUrl = $this->url('/');
         $adminChangePasswordUrl = $this->url('/admin/change-password');
         $adminLogoutUrl = $this->url('/admin/logout');
@@ -557,6 +560,69 @@ class AdminController
         echo json_encode(['success' => false, 'error' => 'Acción no válida']);
     }
 
+    public function adminListarCertificados()
+    {
+        header('Content-Type: application/json');
+
+        if (!$this->isAdminAuthenticated()) {
+            http_response_code(401);
+            echo json_encode(['success' => false, 'error' => 'No autorizado']);
+            return;
+        }
+
+        $busqueda  = trim((string) ($_GET['q'] ?? ''));
+        $pagina    = max(1, (int) ($_GET['pagina'] ?? 1));
+        $porPagina = 15;
+
+        $certificadoModel = new Certificado($this->pdo);
+        $resultado = $certificadoModel->buscarCertificados($busqueda, $pagina, $porPagina);
+
+        echo json_encode([
+            'success'   => true,
+            'total'     => $resultado['total'],
+            'pagina'    => $pagina,
+            'porPagina' => $porPagina,
+            'totalPags' => (int) ceil($resultado['total'] / $porPagina),
+            'filas'     => $resultado['filas'],
+        ]);
+    }
+
+    public function adminVerCertificado()
+    {
+        if (!$this->isAdminAuthenticated()) {
+            http_response_code(401);
+            echo 'No autorizado.';
+            return;
+        }
+
+        $ruta = trim((string) ($_GET['ruta'] ?? ''));
+        if ($ruta === '') {
+            http_response_code(400);
+            echo 'Ruta de archivo inválida.';
+            return;
+        }
+
+        // Resolver rutas relativas (uploads/...) y mantener compatibilidad con rutas absolutas existentes.
+        $rutaArchivo = $ruta;
+        if (!file_exists($rutaArchivo)) {
+            $rutaArchivo = BASE_PATH . '/' . ltrim($ruta, '/\\');
+        }
+
+        $rutaReal = realpath($rutaArchivo);
+        if ($rutaReal === false || !is_file($rutaReal)) {
+            http_response_code(404);
+            echo 'El archivo no existe en el servidor.';
+            return;
+        }
+
+        header('Content-Type: application/pdf');
+        header('Content-Disposition: inline; filename="' . basename($rutaReal) . '"');
+        header('Content-Length: ' . filesize($rutaReal));
+        header('X-Content-Type-Options: nosniff');
+        readfile($rutaReal);
+        exit;
+    }
+
     private function obtenerCedulasValidas(): array
     {
         try {
@@ -570,6 +636,102 @@ class AdminController
             error_log('Error al obtener cédulas: ' . $e->getMessage());
             return [];
         }
+    }
+
+    public function adminUploadCertificado()
+    {
+        header('Content-Type: application/json');
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            http_response_code(405);
+            echo json_encode(['success' => false, 'error' => 'Método no permitido']);
+            return;
+        }
+
+        if (!$this->isAdminAuthenticated()) {
+            echo json_encode(['success' => false, 'error' => 'No autorizado']);
+            return;
+        }
+
+        if (!$this->isValidCsrf()) {
+            echo json_encode(['success' => false, 'error' => 'Token CSRF inválido']);
+            return;
+        }
+
+        $cedula = trim((string) ($_POST['cedula'] ?? ''));
+        $nivel  = trim((string) ($_POST['nivel'] ?? ''));
+
+        if (!preg_match('/^\d{10}$/', $cedula)) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'error' => 'La cédula debe tener 10 dígitos.']);
+            return;
+        }
+
+        if (!in_array($nivel, self::ALLOWED_LEVELS, true)) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'error' => 'Nivel no válido.']);
+            return;
+        }
+
+        if (!isset($_FILES['certificado']) || (int) ($_FILES['certificado']['error'] ?? 1) !== UPLOAD_ERR_OK) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'error' => 'No se recibió el archivo o hubo un error al subirlo.']);
+            return;
+        }
+
+        $archivo = $_FILES['certificado'];
+        $maxSize = 10 * 1024 * 1024; // 10 MB para admin
+        if ((int) $archivo['size'] <= 0 || (int) $archivo['size'] > $maxSize) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'error' => 'El archivo excede el tamaño máximo (10 MB).']);
+            return;
+        }
+
+        $extension = strtolower(pathinfo((string) $archivo['name'], PATHINFO_EXTENSION));
+        $finfo = finfo_open(FILEINFO_MIME_TYPE);
+        $mimeType = $finfo ? finfo_file($finfo, $archivo['tmp_name']) : null;
+        if ($finfo) finfo_close($finfo);
+
+        if ($extension !== 'pdf' || $mimeType !== 'application/pdf') {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'error' => 'Solo se permiten archivos PDF válidos.']);
+            return;
+        }
+
+        // Verificar que la cédula existe en BD
+        $becarioModel = new Becario($this->pdo);
+        if (!$becarioModel->buscarPorCedula($cedula)) {
+            http_response_code(404);
+            echo json_encode(['success' => false, 'error' => 'No existe un estudiante con esa cédula.']);
+            return;
+        }
+
+        $dirUploads = BASE_PATH . '/uploads/';
+        if (!is_dir($dirUploads)) {
+            mkdir($dirUploads, 0755, true);
+        }
+
+        $nombreDestino = $cedula . '_' . $nivel . '_' . time() . '.pdf';
+        $rutaDestino   = $dirUploads . $nombreDestino;
+        $rutaParaDb    = 'uploads/' . $nombreDestino;
+
+        if (!move_uploaded_file($archivo['tmp_name'], $rutaDestino)) {
+            http_response_code(500);
+            echo json_encode(['success' => false, 'error' => 'Error al guardar el archivo en el servidor.']);
+            return;
+        }
+
+        $certificadoModel = new Certificado($this->pdo);
+        $ok = $certificadoModel->guardarCertificado($cedula, $nivel, $rutaParaDb);
+
+        if (!$ok) {
+            @unlink($rutaDestino);
+            http_response_code(500);
+            echo json_encode(['success' => false, 'error' => 'Error al guardar en base de datos.']);
+            return;
+        }
+
+        echo json_encode(['success' => true, 'message' => "Certificado nivel {$nivel} para cédula {$cedula} subido correctamente."]);
     }
 
     private function obtenerDatosModuloResumenAdmin(): array
@@ -594,7 +756,7 @@ class AdminController
             'totalSolicitudesPendientes' => $becarioModel->contarSolicitudesResetPendientes(),
             'filtroFechaDesde' => (string) ($filtros['fecha_desde'] ?? ''),
             'filtroFechaHasta' => (string) ($filtros['fecha_hasta'] ?? ''),
-            'filtroSoloPendientes' => !isset($filtros['solo_pendientes']) || (int) ($filtros['solo_pendientes'] ?? 1) === 1,
+            'filtroSoloPendientes' => isset($filtros['solo_pendientes']) && (int) $filtros['solo_pendientes'] === 1,
         ];
     }
 
@@ -602,7 +764,10 @@ class AdminController
     {
         $fechaDesde = trim((string) ($_GET['fecha_desde'] ?? ''));
         $fechaHasta = trim((string) ($_GET['fecha_hasta'] ?? ''));
-        $soloPendientes = !isset($_GET['solo_pendientes']) || (int) $_GET['solo_pendientes'] === 1;
+        // Solo activar el filtro si el formulario fue enviado (tiene 'tab' en GET) y el checkbox estaba marcado.
+        // Si es carga inicial (sin parámetros), mostrar todas las solicitudes.
+        $formEnviado = isset($_GET['tab']);
+        $soloPendientes = $formEnviado && isset($_GET['solo_pendientes']) && (int) $_GET['solo_pendientes'] === 1;
 
         if ($fechaDesde !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $fechaDesde)) {
             $fechaDesde = '';
@@ -640,7 +805,10 @@ class AdminController
             'conteoNiveles' => $certificadoModel->obtenerConteoPorNiveles($niveles),
             'resumenCertificados' => $certificadoModel->obtenerResumenGeneral(),
             'ultimasCargas' => $certificadoModel->obtenerUltimasCargas(10),
-            'bulkUploadAction' => $this->url('/admin/bulk-upload-certificados'),
+            'bulkUploadAction'       => $this->url('/admin/bulk-upload-certificados'),
+            'uploadCertificadoAction' => $this->url('/admin/upload-certificado'),
+            'listarCertificadosUrl'   => $this->url('/admin/listar-certificados'),
+            'verCertificadoUrl'       => $this->url('/admin/ver-certificado'),
         ];
     }
 

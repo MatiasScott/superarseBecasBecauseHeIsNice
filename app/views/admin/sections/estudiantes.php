@@ -17,7 +17,7 @@
             </div>
             <div class="flex items-end">
                 <label class="inline-flex items-center gap-2 text-sm text-gray-700">
-                    <input type="checkbox" name="solo_pendientes" value="1" <?= !empty($filtroSoloPendientes) ? 'checked' : '' ?>
+                    <input type="checkbox" name="solo_pendientes" value="1" <?= ($filtroSoloPendientes ?? false) ? 'checked' : '' ?>
                         class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
                     Solo pendientes
                 </label>

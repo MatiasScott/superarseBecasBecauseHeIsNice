@@ -155,11 +155,6 @@ document.addEventListener('DOMContentLoaded', () => {
             attachChangePasswordListeners(changePasswordForm);
         }
 
-        // Formulario de subida de certificado
-        const certificadoForm = modalBody.querySelector("form[action$='becario/procesarSubida']");
-        if (certificadoForm) {
-            certificadoForm.addEventListener("submit", handleCertificadoFormSubmission);
-        }
     }
 
     // Maneja el formulario de cambio de contraseña dentro del modal.
@@ -284,49 +279,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const text = document.getElementById("cp-strength-text");
         if (fill) { fill.style.width = (strength * 25) + "%"; fill.className = `h-full transition-all duration-300 rounded-full ${colors[strength]}`; }
         if (text) { text.textContent = labels[strength]; text.className = `text-xs font-semibold ${colors[strength].replace("bg-", "text-")}`; }
-    }
-
-    function handleCertificadoFormSubmission(e) {
-        e.preventDefault();
-        const form = e.target;
-        const formData = new FormData(form);
-        const submitButton = form.querySelector('button[type="submit"]');
-        submitButton.disabled = true;
-        submitButton.textContent = "Subiendo...";
-
-        // Se ha corregido la URL para que sea relativa a la raíz del sitio
-        fetch(buildUrl("/becario/procesarSubida"), {
-            method: form.method,
-            headers: {
-                "X-CSRF-Token": csrfToken,
-            },
-            body: formData,
-        })
-        .then((response) => {
-            if (!response.ok) {
-                return response.json().then((data) => {
-                    throw new Error(data.error || "Error al subir el archivo.");
-                });
-            }
-            return response.json();
-        })
-        .then((data) => {
-            const modalBody = document.getElementById("modal-body");
-            if (data.success) {
-                modalBody.innerHTML = `<div class="text-center text-green-600 font-bold text-lg">${data.message}</div>`;
-            } else {
-                modalBody.innerHTML = `<div class="text-center text-red-500 font-bold text-lg">${data.error}</div>`;
-            }
-        })
-        .catch((error) => {
-            console.error("Error en la subida del certificado:", error);
-            const modalBody = document.getElementById("modal-body");
-            modalBody.innerHTML = `<div class="text-center text-red-500 font-bold text-lg">Error: ${error.message}</div>`;
-        })
-        .finally(() => {
-            submitButton.disabled = false;
-            submitButton.textContent = "Subir Certificado";
-        });
     }
 
 });
