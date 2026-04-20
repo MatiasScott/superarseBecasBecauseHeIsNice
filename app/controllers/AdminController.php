@@ -490,7 +490,7 @@ class AdminController
             $dirUploads = BASE_PATH . '/uploads/';
             if (!is_dir($dirUploads)) {
                 mkdir($dirUploads, 0755, true);
-            }
+            }  
 
             $exitosos = 0;
             $errores = 0;
