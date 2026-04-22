@@ -46,11 +46,20 @@ function h($value)
             <!-- Sección de bienvenida -->
             <div class="bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl p-6 border-l-4 border-blue-600">
                 <p class="text-gray-800 text-lg font-semibold mb-4">
-                    🎓 Tu usuario para ingresar al Aula Virtual:
+                    🎓 Tus credenciales para ingresar al Aula Virtual:
                 </p>
-                <p class="text-2xl font-bold text-blue-700 bg-white inline-block px-4 py-2 rounded-lg">
-                    <?= h($data['cedula']) ?>
-                </p>
+                <div class="space-y-2">
+                    <p class="text-sm text-gray-600 font-semibold">Usuario</p>
+                    <p class="text-2xl font-bold text-blue-700 bg-white inline-block px-4 py-2 rounded-lg">
+                        <?= h($data['cedula']) ?>
+                    </p>
+                </div>
+                <div class="space-y-2 mt-4">
+                    <p class="text-sm text-gray-600 font-semibold">Contraseña</p>
+                    <p class="text-2xl font-bold text-blue-700 bg-white inline-block px-4 py-2 rounded-lg">
+                        <?= h($data['contrasenia'] ?? 'No disponible') ?>
+                    </p>
+                </div>
                 <p class="text-sm text-gray-600 italic mt-4 pt-4 border-t border-blue-200">
                     💡 Por seguridad, si necesitas restablecer tu contraseña de Moodle, solicita soporte al área académica.
                 </p>
