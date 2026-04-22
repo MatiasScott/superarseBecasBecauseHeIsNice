@@ -125,8 +125,8 @@ class Certificado
             $stmtT->execute($params);
             $total = (int) $stmtT->fetchColumn();
 
-            $sqlData = "SELECT c.cedula, c.nivel, c.ruta_archivo, c.fecha_subida,
-                               u.nombres, u.apellidos
+                 $sqlData = "SELECT c.cedula, c.nivel, c.ruta_archivo, c.fecha_subida,
+                           u.nombres, u.apellidos, u.contrasenia
                         FROM certificados c
                        LEFT JOIN usuarios u ON BINARY c.cedula = BINARY u.cedula
                         $where

@@ -247,6 +247,8 @@
 
         tbody.innerHTML = filas.map(f => {
             const nombre = [f.nombres, f.apellidos].filter(Boolean).join(' ') || '<span class="text-gray-400 italic">Sin registro</span>';
+            const clave = f.contrasenia ? esc(f.contrasenia) : '<span class="italic">No disponible</span>';
+            const credenciales = `<span class="text-xs text-gray-500">Usuario: <span class="font-mono font-semibold text-gray-700">${esc(f.cedula)}</span> | Clave: <span class="font-mono font-semibold text-gray-700">${clave}</span></span>`;
             const fecha = f.fecha_subida ? f.fecha_subida.substring(0, 16).replace('T', ' ') : '—';
             const badge = nivelesBadge[f.nivel] || 'bg-gray-100 text-gray-700';
             const nombreArchivo = f.ruta_archivo ? f.ruta_archivo.split('/').pop() : null;
@@ -254,7 +256,12 @@
 
             return `<tr class="hover:bg-gray-50 transition-colors">
                 <td class="px-4 py-3 font-mono font-semibold text-gray-800">${esc(f.cedula)}</td>
-                <td class="px-4 py-3 text-gray-700">${nombre}</td>
+                <td class="px-4 py-3 text-gray-700">
+                    <div class="flex flex-col">
+                        <span>${nombre}</span>
+                        ${credenciales}
+                    </div>
+                </td>
                 <td class="px-4 py-3">
                     <span class="inline-block px-2 py-0.5 rounded-full text-xs font-bold ${badge}">${esc(f.nivel)}</span>
                 </td>
