@@ -331,10 +331,8 @@ class BecarioController
 
         $rutaArchivo = $certificados[$nivel];
 
-        // Si es ruta relativa (uploads/...) resolver desde BASE_PATH
-        if (!file_exists($rutaArchivo)) {
-            $rutaArchivo = BASE_PATH . '/' . ltrim($rutaArchivo, '/\\');
-        }
+        // Resolver rutas relativas (uploads/...) segun la carpeta fisica del entorno.
+        $rutaArchivo = $this->resolveUploadFilePath((string) $rutaArchivo);
 
         $rutaReal = realpath($rutaArchivo);
         if ($rutaReal === false || !is_file($rutaReal)) {
@@ -343,7 +341,7 @@ class BecarioController
             exit;
         }
 
-        $uploadsBase = realpath(BASE_PATH . '/uploads');
+        $uploadsBase = $this->getExistingUploadsBase();
         $rutaRealNorm = str_replace('\\', '/', (string) $rutaReal);
         $uploadsBaseNorm = $uploadsBase ? (rtrim(str_replace('\\', '/', $uploadsBase), '/') . '/') : '';
         if ($uploadsBaseNorm === '' || strpos($rutaRealNorm, $uploadsBaseNorm) !== 0) {
@@ -394,6 +392,59 @@ class BecarioController
         $requestToken = $this->getRequestCsrfToken();
 
         return $sessionToken !== '' && $requestToken !== '' && hash_equals($sessionToken, $requestToken);
+    }
+
+    private function getExistingUploadsBase(): ?string
+    {
+        foreach ($this->getUploadDirCandidates() as $candidato) {
+            if (is_dir($candidato)) {
+                $real = realpath($candidato);
+                return $real !== false ? $real : $candidato;
+            }
+        }
+
+        return null;
+    }
+
+    private function resolveUploadFilePath(string $ruta): string
+    {
+        $ruta = trim($ruta);
+        if ($ruta === '') {
+            return $ruta;
+        }
+
+        if (file_exists($ruta)) {
+            return $ruta;
+        }
+
+        $rutaNormalizada = ltrim($ruta, '/\\');
+        if (preg_match('#^uploads[/\\\\]#', $rutaNormalizada) === 1) {
+            $relativa = preg_replace('#^uploads[/\\\\]#', '', $rutaNormalizada);
+            foreach ($this->getUploadDirCandidates() as $base) {
+                $base = rtrim($base, '/\\') . '/';
+                $candidato = $base . $relativa;
+                if (file_exists($candidato)) {
+                    return $candidato;
+                }
+            }
+
+            $candidatos = $this->getUploadDirCandidates();
+            return rtrim($candidatos[0], '/\\') . '/' . $relativa;
+        }
+
+        $basePathRuta = BASE_PATH . '/' . $rutaNormalizada;
+        return file_exists($basePathRuta) ? $basePathRuta : $ruta;
+    }
+
+    private function getUploadDirCandidates(): array
+    {
+        $parentBase = dirname(BASE_PATH);
+
+        return [
+            $parentBase . '/public_html/uploads',
+            BASE_PATH . '/public_html/uploads',
+            BASE_PATH . '/uploads',
+        ];
     }
 
     private function isAuthorizedCedula(string $cedula): bool

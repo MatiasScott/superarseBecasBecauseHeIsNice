@@ -19,17 +19,17 @@
         <h3 class="text-xl font-bold text-gray-800 flex items-center gap-2">
             <i class="bi bi-cloud-upload"></i> Carga masiva de certificados
         </h3>
-        <p class="text-sm text-gray-600">Especifica la carpeta donde se encuentran los archivos PDF y selecciona el nivel de los certificados.</p>
+        <p class="text-sm text-gray-600">Selecciona los archivos PDF y el nivel de los certificados para cargarlos masivamente.</p>
 
         <form id="bulkUploadForm" class="space-y-4">
             <input type="hidden" name="_csrf" value="<?= h($csrfToken ?? '') ?>">
 
             <div class="grid md:grid-cols-2 gap-4">
                 <div>
-                    <label for="carpeta_ruta" class="block text-sm font-semibold text-gray-700 mb-1">Ruta de la carpeta</label>
-                    <input id="carpeta_ruta" name="carpeta_ruta" type="text" required placeholder="Ej: D:\CERTIFICADOS FIRMADOS\Certificados"
-                        class="w-full border rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    <p class="text-xs text-gray-500 mt-1">Ruta absoluta o relativa al servidor</p>
+                    <label for="pdfs_input" class="block text-sm font-semibold text-gray-700 mb-1">Archivos PDF</label>
+                    <input id="pdfs_input" type="file" multiple accept=".pdf" required
+                        class="w-full border rounded-lg px-3 py-2 text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 file:mr-3 file:py-1 file:px-3 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700">
+                    <p id="pdfsCount" class="text-xs text-gray-500 mt-1">Ningún archivo seleccionado</p>
                 </div>
 
                 <div>
@@ -44,7 +44,7 @@
                 </div>
             </div>
 
-            <button type="submit" id="btnIniciar" 
+            <button type="submit" id="btnIniciar"
                 class="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-bold py-2.5 rounded-lg focus:outline-none focus:ring-4 focus:ring-blue-300 shadow-md disabled:opacity-50 disabled:cursor-not-allowed">
                 <i class="bi bi-play-fill"></i> Iniciar carga
             </button>
@@ -326,15 +326,22 @@
 </script>
 
 <script>
+// Mostrar cantidad de archivos seleccionados
+document.getElementById('pdfs_input').addEventListener('change', function() {
+    const count = this.files.length;
+    document.getElementById('pdfsCount').textContent =
+        count === 0 ? 'Ningún archivo seleccionado' : count + ' archivo(s) seleccionado(s)';
+});
+
 document.getElementById('bulkUploadForm').addEventListener('submit', async function(e) {
     e.preventDefault();
 
-    const carpetaRuta = document.getElementById('carpeta_ruta').value.trim();
+    const pdfsInput = document.getElementById('pdfs_input');
     const nivel = document.getElementById('nivel_certificado').value;
     const csrf = document.querySelector('input[name="_csrf"]').value;
 
-    if (!carpetaRuta || !nivel) {
-        alert('Por favor completa todos los campos');
+    if (!pdfsInput.files.length || !nivel) {
+        alert('Por favor selecciona archivos y un nivel');
         return;
     }
 
@@ -346,72 +353,70 @@ document.getElementById('bulkUploadForm').addEventListener('submit', async funct
     const statusLog = document.getElementById('statusLog');
     statusLog.innerHTML = '<p class="text-gray-600">Iniciando proceso...</p>';
 
-    let offset = 0;
-    let totalArchivos = 0;
     let exitosos = 0;
     let errores = 0;
     const startTime = Date.now();
+    const preferredChunkSize = 100;
+    let chunkSize = preferredChunkSize; // inicia en 100 y se ajusta solo si el servidor lo exige
+    const allFiles = Array.from(pdfsInput.files);
 
     try {
-        // Primera solicitud: obtener total de archivos
-        const respInicio = await fetch('<?= h($bulkUploadAction ?? "#") ?>', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: new URLSearchParams({
-                action: 'init',
-                carpeta_ruta: carpetaRuta,
-                nivel: nivel,
-                _csrf: csrf
-            })
-        });
+        logStatus(`📁 Se encontraron ${allFiles.length} archivos`);
 
-        const dataInicio = await respInicio.json();
-        if (!dataInicio.success) {
-            throw new Error(dataInicio.error || 'Error al inicializar');
-        }
-
-        totalArchivos = dataInicio.total;
-        logStatus(`📁 Se encontraron ${totalArchivos} archivos`);
-
-        if (totalArchivos === 0) {
+        if (allFiles.length === 0) {
             logStatus('⚠️ No hay archivos para procesar');
             showResult(exitosos, errores, startTime);
             return;
         }
 
-        // Procesar en chunks de 100
-        const chunkSize = 100;
-        while (offset < totalArchivos) {
+        logStatus(`🚀 Iniciando carga en lotes de ${chunkSize} archivo(s)`);
+
+        // Procesar todos los archivos en lotes internos
+        let offset = 0;
+        while (offset < allFiles.length) {
+            const chunk = allFiles.slice(offset, offset + chunkSize);
+
+            const formData = new FormData();
+            formData.append('action', 'process');
+            formData.append('nivel', nivel);
+            chunk.forEach(function(file) {
+                formData.append('pdfs[]', file, file.name);
+            });
+
             const respChunk = await fetch('<?= h($bulkUploadAction ?? "#") ?>', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: new URLSearchParams({
-                    action: 'process',
-                    carpeta_ruta: carpetaRuta,
-                    nivel: nivel,
-                    offset: offset,
-                    chunk_size: chunkSize,
-                    _csrf: csrf
-                })
+                headers: {
+                    'X-CSRF-Token': csrf,
+                    'X-Cert-Nivel': nivel
+                },
+                body: formData
             });
 
             const dataChunk = await respChunk.json();
             if (!dataChunk.success) {
-                throw new Error(dataChunk.error || 'Error al procesar chunk');
+                const errMsg = String(dataChunk.error || 'Error al procesar lote');
+                const debeReducir = /post_max_size|No se recibieron archivos en el lote|No se recibieron archivos/i.test(errMsg);
+
+                if (debeReducir && chunkSize > 1) {
+                    chunkSize = Math.max(1, Math.floor(chunkSize / 2));
+                    logStatus(`⚠️ Lote muy grande, reintentando con ${chunkSize} archivo(s) por envio...`);
+                    continue;
+                }
+
+                throw new Error(errMsg);
             }
 
             exitosos += dataChunk.exitosos || 0;
             errores += dataChunk.errores || 0;
 
             // Actualizar progreso
-            offset += chunkSize;
-            const porcentaje = Math.min(100, (offset / totalArchivos) * 100);
+            offset += chunk.length;
+            const porcentaje = Math.min(100, (offset / allFiles.length) * 100);
             document.getElementById('progressBar').style.width = porcentaje + '%';
-            document.getElementById('progressText').textContent = `${offset} / ${totalArchivos}`;
+            document.getElementById('progressText').textContent = `${offset} / ${allFiles.length}`;
 
-            // Log de errores si los hay
             if (dataChunk.mensajes && dataChunk.mensajes.length > 0) {
-                dataChunk.mensajes.forEach(msg => logStatus(msg));
+                dataChunk.mensajes.forEach(function(msg) { logStatus(msg); });
             }
         }
 

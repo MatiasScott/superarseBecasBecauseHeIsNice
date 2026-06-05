@@ -441,12 +441,10 @@ class AdminController
 
         header('Content-Type: application/json');
 
-        $action = (string) ($_POST['action'] ?? '');
-        $carpetaRuta = (string) ($_POST['carpeta_ruta'] ?? '');
-        $nivel = (string) ($_POST['nivel'] ?? '');
+        $nivel = (string) ($_SERVER['HTTP_X_CERT_NIVEL'] ?? ($_POST['nivel'] ?? ''));
 
-        if (!$carpetaRuta || !$nivel) {
-            echo json_encode(['success' => false, 'error' => 'Ruta o nivel no especificado']);
+        if (!$nivel) {
+            echo json_encode(['success' => false, 'error' => 'Nivel no especificado']);
             return;
         }
 
@@ -455,110 +453,121 @@ class AdminController
             return;
         }
 
-        // Validar y normalizar la ruta
-        $rutaReal = realpath($carpetaRuta);
-        if (!$rutaReal || !is_dir($rutaReal)) {
-            echo json_encode(['success' => false, 'error' => 'Carpeta no encontrada o no es válida']);
-            return;
-        }
-
-        // Buscar archivos PDF
-        $archivos = glob($rutaReal . '/*.pdf');
-        if (!is_array($archivos)) {
-            $archivos = [];
-        }
-
-        if ($action === 'init') {
-            echo json_encode([
-                'success' => true,
-                'total' => count($archivos),
-                'carpeta' => $rutaReal,
-                'nivel' => $nivel,
-            ]);
-            return;
-        }
-
-        if ($action === 'process') {
-            $offset = (int) ($_POST['offset'] ?? 0);
-            $chunkSize = min(100, (int) ($_POST['chunk_size'] ?? 100));
-
-            $archivosChunk = array_slice($archivos, $offset, $chunkSize);
-            $certificadoModel = new Certificado($this->pdo);
-            $cedulas = $this->obtenerCedulasValidas();
-
-            // Asegurar que el directorio uploads existe
-            $dirUploads = BASE_PATH . '/uploads/';
-            if (!is_dir($dirUploads)) {
-                mkdir($dirUploads, 0755, true);
-            }  
-
-            $exitosos = 0;
-            $errores = 0;
-            $mensajes = [];
-
-            foreach ($archivosChunk as $rutaArchivo) {
-                $nombreArchivo = basename($rutaArchivo);
-                $partes = explode('_', $nombreArchivo);
-
-                if (empty($partes[0])) {
-                    $errores++;
-                    $mensajes[] = "❌ {$nombreArchivo}: No se pudo extraer la cédula";
-                    continue;
-                }
-
-                $cedula = $partes[0];
-
-                // Validar que sea cédula (10 dígitos)
-                if (!preg_match('/^\\d+$/', $cedula) || strlen($cedula) > 10) {
-                    $errores++;
-                    $mensajes[] = "❌ {$nombreArchivo}: Cédula inválida ({$cedula})";
-                    continue;
-                }
-
-                // Rellenar con cero si es necesario
-                if (strlen($cedula) < 10) {
-                    $cedula = str_pad($cedula, 10, '0', STR_PAD_LEFT);
-                }
-
-                // Validar que la cédula existe en base de datos
-                if (!in_array($cedula, $cedulas, true)) {
-                    $errores++;
-                    $mensajes[] = "⚠️ {$nombreArchivo}: Cédula {$cedula} no encontrada en BD";
-                    continue;
-                }
-
-                // Guardar certificado: copiar a /uploads/ y guardar ruta relativa
-                $nombreDestino = $cedula . '_' . $nivel . '_' . time() . '_' . mt_rand(1000, 9999) . '.pdf';
-                $rutaDestino = $dirUploads . $nombreDestino;
-                $rutaParaDb = 'uploads/' . $nombreDestino;
-
-                if (!copy($rutaArchivo, $rutaDestino)) {
-                    $errores++;
-                    $mensajes[] = "❌ Cédula {$cedula}: No se pudo copiar el archivo";
-                    continue;
-                }
-
-                $ok = $certificadoModel->guardarCertificado($cedula, $nivel, $rutaParaDb);
-                if ($ok) {
-                    $exitosos++;
-                } else {
-                    // Revertir copia si falló el guardado en BD
-                    @unlink($rutaDestino);
-                    $errores++;
-                    $mensajes[] = "❌ Cédula {$cedula}: Error al guardar en base de datos";
-                }
+        // Cuando el payload supera post_max_size, PHP vacia $_POST/$_FILES silenciosamente.
+        if (empty($_FILES['pdfs']) || !is_array($_FILES['pdfs']['name'])) {
+            $contentLength = (int) ($_SERVER['CONTENT_LENGTH'] ?? 0);
+            $postMaxBytes = $this->iniSizeToBytes((string) ini_get('post_max_size'));
+            if ($contentLength > 0 && $postMaxBytes > 0 && $contentLength > $postMaxBytes) {
+                echo json_encode(['success' => false, 'error' => 'El lote excede el limite del servidor (post_max_size=' . ini_get('post_max_size') . ').']);
+                return;
             }
 
+            echo json_encode(['success' => false, 'error' => 'No se recibieron archivos en el lote']);
+            return;
+        }
+
+        $dirUploads = $this->getUploadsDir();
+
+        if (!is_dir($dirUploads) || !is_writable($dirUploads)) {
             echo json_encode([
-                'success' => true,
-                'exitosos' => $exitosos,
-                'errores' => $errores,
-                'mensajes' => $mensajes,
+                'success' => false,
+                'error' => 'La carpeta uploads no existe o no tiene permisos de escritura en el servidor. Ruta detectada: ' . $dirUploads,
             ]);
             return;
         }
 
-        echo json_encode(['success' => false, 'error' => 'Acción no válida']);
+        $certificadoModel = new Certificado($this->pdo);
+        $cedulas = $this->obtenerCedulasValidas();
+
+        $exitosos = 0;
+        $errores  = 0;
+        $mensajes = [];
+
+        $totalFiles = count($_FILES['pdfs']['name']);
+        for ($i = 0; $i < $totalFiles; $i++) {
+            $uploadError  = $_FILES['pdfs']['error'][$i] ?? UPLOAD_ERR_NO_FILE;
+            $tmpPath      = $_FILES['pdfs']['tmp_name'][$i] ?? '';
+            $nombreArchivo = basename((string) ($_FILES['pdfs']['name'][$i] ?? ''));
+
+            if ($uploadError !== UPLOAD_ERR_OK || !is_uploaded_file($tmpPath)) {
+                $errores++;
+                $mensajes[] = "❌ {$nombreArchivo}: Error en la subida (código {$uploadError})";
+                continue;
+            }
+
+            // Validar que sea PDF por MIME
+            $finfo = new \finfo(FILEINFO_MIME_TYPE);
+            $mime  = $finfo->file($tmpPath);
+            if ($mime !== 'application/pdf') {
+                $errores++;
+                $mensajes[] = "❌ {$nombreArchivo}: No es un archivo PDF válido";
+                continue;
+            }
+
+            $partes = explode('_', $nombreArchivo);
+            if (empty($partes[0])) {
+                $errores++;
+                $mensajes[] = "❌ {$nombreArchivo}: No se pudo extraer la cédula";
+                continue;
+            }
+
+            $cedula = $partes[0];
+
+            // Quitar extensión si es el único segmento
+            $cedula = preg_replace('/\.pdf$/i', '', $cedula);
+
+            if (!preg_match('/^\d+$/', $cedula) || strlen($cedula) > 10) {
+                $errores++;
+                $mensajes[] = "❌ {$nombreArchivo}: Cédula inválida ({$cedula})";
+                continue;
+            }
+
+            if (strlen($cedula) < 10) {
+                $cedula = str_pad($cedula, 10, '0', STR_PAD_LEFT);
+            }
+
+            if (!in_array($cedula, $cedulas, true)) {
+                $errores++;
+                $mensajes[] = "⚠️ {$nombreArchivo}: Cédula {$cedula} no encontrada en BD";
+                continue;
+            }
+
+            $randomSuffix = bin2hex(random_bytes(6));
+            $nombreDestino = $cedula . '_' . $nivel . '_' . time() . '_' . $randomSuffix . '.pdf';
+            $rutaDestino   = $dirUploads . $nombreDestino;
+            $rutaParaDb    = 'uploads/' . $nombreDestino;
+
+            if (!move_uploaded_file($tmpPath, $rutaDestino)) {
+                // Fallback: en algunos servidores move_uploaded_file puede fallar por permisos/ruta;
+                // intentamos copiar desde tmp para no perder el lote completo.
+                $copied = is_readable($tmpPath) ? @copy($tmpPath, $rutaDestino) : false;
+                if (!$copied) {
+                    $lastError = error_get_last();
+                    $detalle = $lastError['message'] ?? 'sin detalle';
+                    $errores++;
+                    $mensajes[] = "❌ Cédula {$cedula}: No se pudo guardar el archivo ({$detalle})";
+                    continue;
+                }
+
+                @unlink($tmpPath);
+            }
+
+            $ok = $certificadoModel->guardarCertificado($cedula, $nivel, $rutaParaDb);
+            if ($ok) {
+                $exitosos++;
+            } else {
+                @unlink($rutaDestino);
+                $errores++;
+                $mensajes[] = "❌ Cédula {$cedula}: Error al guardar en base de datos";
+            }
+        }
+
+        echo json_encode([
+            'success'  => true,
+            'exitosos' => $exitosos,
+            'errores'  => $errores,
+            'mensajes' => $mensajes,
+        ]);
     }
 
     public function adminListarCertificados()
@@ -603,11 +612,8 @@ class AdminController
             return;
         }
 
-        // Resolver rutas relativas (uploads/...) y mantener compatibilidad con rutas absolutas existentes.
-        $rutaArchivo = $ruta;
-        if (!file_exists($rutaArchivo)) {
-            $rutaArchivo = BASE_PATH . '/' . ltrim($ruta, '/\\');
-        }
+        // Resolver rutas relativas (uploads/...) segun la carpeta fisica del entorno.
+        $rutaArchivo = $this->resolveUploadFilePath($ruta);
 
         $rutaReal = realpath($rutaArchivo);
         if ($rutaReal === false || !is_file($rutaReal)) {
@@ -616,7 +622,7 @@ class AdminController
             return;
         }
 
-        $uploadsBase = realpath(BASE_PATH . '/uploads');
+        $uploadsBase = $this->getExistingUploadsBase();
         $rutaRealNorm = str_replace('\\', '/', (string) $rutaReal);
         $uploadsBaseNorm = $uploadsBase ? (rtrim(str_replace('\\', '/', $uploadsBase), '/') . '/') : '';
         if ($uploadsBaseNorm === '' || strpos($rutaRealNorm, $uploadsBaseNorm) !== 0) {
@@ -718,9 +724,12 @@ class AdminController
             return;
         }
 
-        $dirUploads = BASE_PATH . '/uploads/';
-        if (!is_dir($dirUploads)) {
-            mkdir($dirUploads, 0755, true);
+        $dirUploads = $this->getUploadsDir();
+
+        if (!is_dir($dirUploads) || !is_writable($dirUploads)) {
+            http_response_code(500);
+            echo json_encode(['success' => false, 'error' => 'La carpeta uploads no existe o no tiene permisos de escritura en el servidor. Ruta detectada: ' . $dirUploads]);
+            return;
         }
 
         $nombreDestino = $cedula . '_' . $nivel . '_' . time() . '.pdf';
@@ -744,6 +753,78 @@ class AdminController
         }
 
         echo json_encode(['success' => true, 'message' => "Certificado nivel {$nivel} para cédula {$cedula} subido correctamente."]);
+    }
+
+    private function getUploadsDir(): string
+    {
+        foreach ($this->getUploadDirCandidates() as $candidate) {
+            $parentDir = dirname(rtrim($candidate, '/\\'));
+            if (is_dir($candidate)) {
+                return rtrim($candidate, '/\\') . '/';
+            }
+
+            if (is_dir($parentDir) && is_writable($parentDir)) {
+                @mkdir($candidate, 0755, true);
+                if (is_dir($candidate)) {
+                    return rtrim($candidate, '/\\') . '/';
+                }
+            }
+        }
+
+        $fallback = $this->getUploadDirCandidates();
+        return rtrim($fallback[0], '/\\') . '/';
+    }
+
+    private function getExistingUploadsBase(): ?string
+    {
+        foreach ($this->getUploadDirCandidates() as $candidato) {
+            if (is_dir($candidato)) {
+                $real = realpath($candidato);
+                return $real !== false ? $real : $candidato;
+            }
+        }
+
+        return null;
+    }
+
+    private function resolveUploadFilePath(string $ruta): string
+    {
+        $ruta = trim($ruta);
+        if ($ruta === '') {
+            return $ruta;
+        }
+
+        if (file_exists($ruta)) {
+            return $ruta;
+        }
+
+        $rutaNormalizada = ltrim($ruta, '/\\');
+        if (preg_match('#^uploads[/\\\\]#', $rutaNormalizada) === 1) {
+            $relativa = preg_replace('#^uploads[/\\\\]#', '', $rutaNormalizada);
+            foreach ($this->getUploadDirCandidates() as $base) {
+                $base = rtrim($base, '/\\') . '/';
+                $candidato = $base . $relativa;
+                if (file_exists($candidato)) {
+                    return $candidato;
+                }
+            }
+
+            return $this->getUploadsDir() . $relativa;
+        }
+
+        $basePathRuta = BASE_PATH . '/' . $rutaNormalizada;
+        return file_exists($basePathRuta) ? $basePathRuta : $ruta;
+    }
+
+    private function getUploadDirCandidates(): array
+    {
+        $parentBase = dirname(BASE_PATH);
+
+        return [
+            $parentBase . '/public_html/uploads',
+            BASE_PATH . '/public_html/uploads',
+            BASE_PATH . '/uploads',
+        ];
     }
 
     private function obtenerDatosModuloResumenAdmin(): array
@@ -852,6 +933,29 @@ class AdminController
         $requestToken = $this->getRequestCsrfToken();
 
         return $sessionToken !== '' && $requestToken !== '' && hash_equals($sessionToken, $requestToken);
+    }
+
+    private function iniSizeToBytes(string $value): int
+    {
+        $value = trim($value);
+        if ($value === '') {
+            return 0;
+        }
+
+        $unit = strtolower(substr($value, -1));
+        $num = (int) $value;
+
+        if ($unit === 'g') {
+            return $num * 1024 * 1024 * 1024;
+        }
+        if ($unit === 'm') {
+            return $num * 1024 * 1024;
+        }
+        if ($unit === 'k') {
+            return $num * 1024;
+        }
+
+        return $num;
     }
 
     private function isAdminAuthenticated(): bool
