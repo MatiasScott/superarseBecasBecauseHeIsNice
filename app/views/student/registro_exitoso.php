@@ -80,13 +80,13 @@ function h($value)
                 <a href="<?= h($data['moodle_link']) ?>" target="_blank"
                     class="group flex items-center justify-center gap-3 bg-gradient-to-br from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white font-bold py-4 px-6 rounded-xl shadow-lg transform transition-all duration-300 hover:shadow-xl hover:scale-105">
                     <i class="bi bi-mortarboard-fill text-2xl group-hover:scale-110 transition-transform"></i>
-                    <span>Entrar a Moodle</span>
+                    <span>Presione aquí para entrar al Aula Virtual</span>
                 </a>
 
                 <a href="<?= h($data['whatsapp_link']) ?>" target="_blank"
                     class="group flex items-center justify-center gap-3 bg-gradient-to-br from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-bold py-4 px-6 rounded-xl shadow-lg transform transition-all duration-300 hover:shadow-xl hover:scale-105">
                     <i class="bi bi-whatsapp text-2xl group-hover:scale-110 transition-transform"></i>
-                    <span>Entrar a WhatsApp</span>
+                    <span>Presione aquí para entrar al grupo de WhatsApp</span>
                 </a>
             </div>
 
