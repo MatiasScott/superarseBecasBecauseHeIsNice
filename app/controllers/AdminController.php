@@ -213,6 +213,14 @@ class AdminController
         $discardResetRequestAction = $estudiantesModulo['discardResetRequestAction'];
         $solicitudesReset = $estudiantesModulo['solicitudesReset'];
         $totalSolicitudesPendientes = $estudiantesModulo['totalSolicitudesPendientes'];
+        $totalSolicitudesFiltradas = $estudiantesModulo['totalSolicitudesFiltradas'];
+        $paginaSolicitudes = $estudiantesModulo['paginaSolicitudes'];
+        $totalPaginasSolicitudes = $estudiantesModulo['totalPaginasSolicitudes'];
+        $desdeSolicitudes = $estudiantesModulo['desdeSolicitudes'];
+        $hastaSolicitudes = $estudiantesModulo['hastaSolicitudes'];
+        $prevSolicitudesUrl = $estudiantesModulo['prevSolicitudesUrl'];
+        $nextSolicitudesUrl = $estudiantesModulo['nextSolicitudesUrl'];
+        $filtroBusquedaSolicitudes = $estudiantesModulo['filtroBusquedaSolicitudes'];
         $filtroFechaDesde = $estudiantesModulo['filtroFechaDesde'];
         $filtroFechaHasta = $estudiantesModulo['filtroFechaHasta'];
         $filtroSoloPendientes = $estudiantesModulo['filtroSoloPendientes'];
@@ -973,7 +981,13 @@ class AdminController
     private function obtenerDatosModuloEstudiantesAdmin(array $filtros = []): array
     {
         $becarioModel = new Becario($this->pdo);
-        $solicitudesReset = $becarioModel->obtenerSolicitudesResetPendientes($filtros, 80);
+        $paginaSolicitudes = max(1, (int) ($_GET['pagina_solicitudes'] ?? 1));
+        $porPaginaSolicitudes = 20;
+        $resultadoSolicitudes = $becarioModel->obtenerSolicitudesResetPendientesPaginado($filtros, $paginaSolicitudes, $porPaginaSolicitudes);
+        $solicitudesReset = $resultadoSolicitudes['filas'] ?? [];
+        $paginaSolicitudes = (int) ($resultadoSolicitudes['pagina'] ?? 1);
+        $totalSolicitudesFiltradas = (int) ($resultadoSolicitudes['total'] ?? 0);
+        $totalPaginasSolicitudes = (int) ($resultadoSolicitudes['totalPaginas'] ?? 1);
 
         $paginaAccesos = max(1, (int) ($_GET['pagina_accesos'] ?? 1));
         $porPaginaAccesos = 50;
@@ -994,6 +1008,28 @@ class AdminController
         if (isset($filtros['solo_pendientes']) && (int) $filtros['solo_pendientes'] === 1) {
             $paramsBase['solo_pendientes'] = '1';
         }
+        if (!empty($filtros['q'])) {
+            $paramsBase['q'] = (string) $filtros['q'];
+        }
+
+        $desdeSolicitudes = $totalSolicitudesFiltradas > 0 ? (($paginaSolicitudes - 1) * $porPaginaSolicitudes + 1) : 0;
+        $hastaSolicitudes = $totalSolicitudesFiltradas > 0 ? min($paginaSolicitudes * $porPaginaSolicitudes, $totalSolicitudesFiltradas) : 0;
+        $prevSolicitudesUrl = '';
+        $nextSolicitudesUrl = '';
+
+        if ($paginaSolicitudes > 1) {
+            $paramsPrevSolicitudes = $paramsBase;
+            $paramsPrevSolicitudes['pagina_solicitudes'] = (string) ($paginaSolicitudes - 1);
+            $paramsPrevSolicitudes['pagina_accesos'] = (string) $paginaAccesos;
+            $prevSolicitudesUrl = $this->url('/admin/dashboard?' . http_build_query($paramsPrevSolicitudes));
+        }
+
+        if ($paginaSolicitudes < $totalPaginasSolicitudes) {
+            $paramsNextSolicitudes = $paramsBase;
+            $paramsNextSolicitudes['pagina_solicitudes'] = (string) ($paginaSolicitudes + 1);
+            $paramsNextSolicitudes['pagina_accesos'] = (string) $paginaAccesos;
+            $nextSolicitudesUrl = $this->url('/admin/dashboard?' . http_build_query($paramsNextSolicitudes));
+        }
 
         $desdeAccesos = $totalAccesos > 0 ? (($paginaAccesos - 1) * $porPaginaAccesos + 1) : 0;
         $hastaAccesos = $totalAccesos > 0 ? min($paginaAccesos * $porPaginaAccesos, $totalAccesos) : 0;
@@ -1004,12 +1040,14 @@ class AdminController
         if ($paginaAccesos > 1) {
             $paramsPrev = $paramsBase;
             $paramsPrev['pagina_accesos'] = (string) ($paginaAccesos - 1);
+            $paramsPrev['pagina_solicitudes'] = (string) $paginaSolicitudes;
             $prevUrl = $this->url('/admin/dashboard?' . http_build_query($paramsPrev));
         }
 
         if ($paginaAccesos < $totalPaginasAccesos) {
             $paramsNext = $paramsBase;
             $paramsNext['pagina_accesos'] = (string) ($paginaAccesos + 1);
+            $paramsNext['pagina_solicitudes'] = (string) $paginaSolicitudes;
             $nextUrl = $this->url('/admin/dashboard?' . http_build_query($paramsNext));
         }
 
@@ -1018,6 +1056,14 @@ class AdminController
             'discardResetRequestAction' => $this->url('/admin/discard-reset-request'),
             'solicitudesReset' => $solicitudesReset,
             'totalSolicitudesPendientes' => $becarioModel->contarSolicitudesResetPendientes(),
+            'totalSolicitudesFiltradas' => $totalSolicitudesFiltradas,
+            'paginaSolicitudes' => $paginaSolicitudes,
+            'totalPaginasSolicitudes' => $totalPaginasSolicitudes,
+            'desdeSolicitudes' => $desdeSolicitudes,
+            'hastaSolicitudes' => $hastaSolicitudes,
+            'prevSolicitudesUrl' => $prevSolicitudesUrl,
+            'nextSolicitudesUrl' => $nextSolicitudesUrl,
+            'filtroBusquedaSolicitudes' => (string) ($filtros['q'] ?? ''),
             'filtroFechaDesde' => (string) ($filtros['fecha_desde'] ?? ''),
             'filtroFechaHasta' => (string) ($filtros['fecha_hasta'] ?? ''),
             'filtroSoloPendientes' => isset($filtros['solo_pendientes']) && (int) $filtros['solo_pendientes'] === 1,
@@ -1188,6 +1234,7 @@ class AdminController
     {
         $fechaDesde = trim((string) ($_GET['fecha_desde'] ?? ''));
         $fechaHasta = trim((string) ($_GET['fecha_hasta'] ?? ''));
+        $busqueda = trim((string) ($_GET['q'] ?? ''));
         // Solo activar el filtro si el formulario fue enviado (tiene 'tab' en GET) y el checkbox estaba marcado.
         // Si es carga inicial (sin parámetros), mostrar todas las solicitudes.
         $formEnviado = isset($_GET['tab']);
@@ -1201,10 +1248,15 @@ class AdminController
             $fechaHasta = '';
         }
 
+        if (mb_strlen($busqueda) > 120) {
+            $busqueda = mb_substr($busqueda, 0, 120);
+        }
+
         return [
             'fecha_desde' => $fechaDesde,
             'fecha_hasta' => $fechaHasta,
             'solo_pendientes' => $soloPendientes ? 1 : 0,
+            'q' => $busqueda,
         ];
     }
 

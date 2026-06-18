@@ -182,19 +182,32 @@ class Becario
      */
     public function obtenerSolicitudesResetPendientes($filtros = [], $limite = 20)
     {
+        if (!is_array($filtros)) {
+            $limite = (int) $filtros;
+            $filtros = [];
+        }
+
+        $resultado = $this->obtenerSolicitudesResetPendientesPaginado($filtros, 1, max(1, min(200, (int) $limite)));
+        return $resultado['filas'] ?? [];
+    }
+
+    /**
+     * Obtiene solicitudes de reseteo con filtros, busqueda y paginacion.
+     * @param array $filtros
+     * @param int $pagina
+     * @param int $porPagina
+     * @return array
+     */
+    public function obtenerSolicitudesResetPendientesPaginado(array $filtros = [], $pagina = 1, $porPagina = 20)
+    {
         try {
-            if (!is_array($filtros)) {
-                $limite = (int) $filtros;
-                $filtros = [];
-            }
+            $pagina = max(1, (int) $pagina);
+            $porPagina = max(10, min(200, (int) $porPagina));
 
-            $limite = max(1, min(200, (int) $limite));
-
-            // Si la clave no existe en $filtros (llamada sin parámetros), mostrar todos.
-            // Solo filtrar por pendientes cuando el valor sea explícitamente 1.
             $soloPendientes = isset($filtros['solo_pendientes']) && (int) $filtros['solo_pendientes'] === 1;
             $fechaDesde = trim((string) ($filtros['fecha_desde'] ?? ''));
             $fechaHasta = trim((string) ($filtros['fecha_hasta'] ?? ''));
+            $busqueda = trim((string) ($filtros['q'] ?? ''));
 
             if ($fechaDesde !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $fechaDesde)) {
                 $fechaDesde = '';
@@ -222,24 +235,71 @@ class Becario
                 $params[] = $fechaHasta;
             }
 
+            if ($busqueda !== '') {
+                $where[] = "(
+                    s.cedula LIKE ?
+                    OR u.nombres LIKE ?
+                    OR u.apellidos LIKE ?
+                    OR CONCAT(COALESCE(u.nombres, ''), ' ', COALESCE(u.apellidos, '')) LIKE ?
+                )";
+                $like = '%' . $busqueda . '%';
+                $params[] = $like;
+                $params[] = $like;
+                $params[] = $like;
+                $params[] = $like;
+            }
+
             $whereSql = empty($where) ? '' : ('WHERE ' . implode(' AND ', $where));
 
-                   $sql = "SELECT s.id, s.cedula, s.estado, s.solicitado_en, s.atendido_en,
-                         u.nombres, u.apellidos,
+            $sqlTotal = "SELECT COUNT(*) AS total
+                         FROM solicitudes_reset_contrasenia s
+                         LEFT JOIN usuarios u ON u.cedula COLLATE utf8mb4_unicode_ci = s.cedula
+                         {$whereSql}";
+
+            $stmtTotal = $this->pdo->prepare($sqlTotal);
+            $stmtTotal->execute($params);
+            $rowTotal = $stmtTotal->fetch(PDO::FETCH_ASSOC);
+            $total = (int) ($rowTotal['total'] ?? 0);
+
+            $totalPaginas = $total > 0 ? (int) ceil($total / $porPagina) : 1;
+            $pagina = min($pagina, $totalPaginas);
+            $offset = ($pagina - 1) * $porPagina;
+
+            $sql = "SELECT s.id, s.cedula, s.estado, s.solicitado_en, s.atendido_en,
+                           u.nombres, u.apellidos,
                            a.usuario AS atendido_por_usuario
                     FROM solicitudes_reset_contrasenia s
                     LEFT JOIN usuarios u ON u.cedula COLLATE utf8mb4_unicode_ci = s.cedula
                     LEFT JOIN admins a ON a.id = s.atendido_por_admin_id
                     {$whereSql}
                     ORDER BY s.solicitado_en DESC, s.id DESC
-                    LIMIT {$limite}";
+                    LIMIT :limite OFFSET :offset";
 
             $stmt = $this->pdo->prepare($sql);
-            $stmt->execute($params);
-            return $stmt->fetchAll(PDO::FETCH_ASSOC);
+            $idx = 1;
+            foreach ($params as $param) {
+                $stmt->bindValue($idx++, $param, PDO::PARAM_STR);
+            }
+            $stmt->bindValue(':limite', $porPagina, PDO::PARAM_INT);
+            $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+            $stmt->execute();
+
+            return [
+                'total' => $total,
+                'pagina' => $pagina,
+                'porPagina' => $porPagina,
+                'totalPaginas' => $totalPaginas,
+                'filas' => $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [],
+            ];
         } catch (PDOException $e) {
-            error_log("Error al obtener solicitudes de reseteo: " . $e->getMessage());
-            return [];
+            error_log("Error al obtener solicitudes de reseteo paginadas: " . $e->getMessage());
+            return [
+                'total' => 0,
+                'pagina' => 1,
+                'porPagina' => 20,
+                'totalPaginas' => 1,
+                'filas' => [],
+            ];
         }
     }
 

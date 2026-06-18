@@ -4,7 +4,12 @@
 
     <form method="GET" action="" class="rounded-xl border border-gray-200 bg-white p-4 space-y-3">
         <input type="hidden" name="tab" value="estudiantes">
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <div>
+                <label for="q" class="block text-xs font-semibold text-gray-600 mb-1">Buscar por cédula o nombre</label>
+                <input id="q" name="q" type="text" value="<?= h($filtroBusquedaSolicitudes ?? '') ?>" placeholder="Ej: 1234567890 o Juan"
+                    class="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
             <div>
                 <label for="fecha_desde" class="block text-xs font-semibold text-gray-600 mb-1">Fecha desde</label>
                 <input id="fecha_desde" name="fecha_desde" type="date" value="<?= h($filtroFechaDesde ?? '') ?>"
@@ -123,6 +128,41 @@
                         <?php endforeach; ?>
                     </tbody>
                 </table>
+            </div>
+
+            <div class="flex flex-wrap items-center justify-between gap-3 pt-2">
+                <p class="text-xs text-gray-600">
+                    Mostrando <?= (int) ($desdeSolicitudes ?? 0) ?> - <?= (int) ($hastaSolicitudes ?? 0) ?>
+                    de <?= (int) ($totalSolicitudesFiltradas ?? 0) ?> solicitudes
+                    (página <?= (int) ($paginaSolicitudes ?? 1) ?> de <?= (int) ($totalPaginasSolicitudes ?? 1) ?>)
+                </p>
+                <div class="flex items-center gap-2">
+                    <?php if (!empty($prevSolicitudesUrl)) : ?>
+                        <a href="<?= h($prevSolicitudesUrl) ?>"
+                            class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-gray-300 text-sm text-gray-700 hover:bg-gray-100">
+                            <i class="bi bi-chevron-left"></i>
+                            Anterior
+                        </a>
+                    <?php else : ?>
+                        <span class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-gray-200 text-sm text-gray-400 cursor-not-allowed">
+                            <i class="bi bi-chevron-left"></i>
+                            Anterior
+                        </span>
+                    <?php endif; ?>
+
+                    <?php if (!empty($nextSolicitudesUrl)) : ?>
+                        <a href="<?= h($nextSolicitudesUrl) ?>"
+                            class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-gray-300 text-sm text-gray-700 hover:bg-gray-100">
+                            Siguiente
+                            <i class="bi bi-chevron-right"></i>
+                        </a>
+                    <?php else : ?>
+                        <span class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-gray-200 text-sm text-gray-400 cursor-not-allowed">
+                            Siguiente
+                            <i class="bi bi-chevron-right"></i>
+                        </span>
+                    <?php endif; ?>
+                </div>
             </div>
         <?php else : ?>
             <p class="text-sm text-gray-600">No hay solicitudes para los filtros seleccionados.</p>
