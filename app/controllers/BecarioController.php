@@ -202,6 +202,9 @@ class BecarioController
         $_SESSION['authorized_cedula'] = $cedula;
         $csrfToken = $this->ensureCsrfToken();
 
+        // Registrar ultimo ingreso sin bloquear el flujo si falla el log.
+        $becarioModel->registrarIngresoLanding($cedula);
+
         // Detectar primer ingreso: contraseña aún es la cédula (sin cambiar)
         if ($becarioModel->verifyPassword($cedula, (string) $becarioData['contrasenia_login'])) {
             $changePasswordUrl = $this->url('/becario/change-password');

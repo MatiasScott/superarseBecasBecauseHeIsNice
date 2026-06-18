@@ -4,6 +4,11 @@ require_once BASE_PATH . '/app/models/Admin.php';
 require_once BASE_PATH . '/app/models/Becario.php';
 require_once BASE_PATH . '/app/models/Certificado.php';
 
+$vendorAutoloadPath = BASE_PATH . '/vendor/autoload.php';
+if (is_file($vendorAutoloadPath)) {
+    require_once $vendorAutoloadPath;
+}
+
 class AdminController
 {
     private $pdo;
@@ -211,6 +216,16 @@ class AdminController
         $filtroFechaDesde = $estudiantesModulo['filtroFechaDesde'];
         $filtroFechaHasta = $estudiantesModulo['filtroFechaHasta'];
         $filtroSoloPendientes = $estudiantesModulo['filtroSoloPendientes'];
+        $listadoEstudiantesAcceso = $estudiantesModulo['listadoEstudiantesAcceso'];
+        $totalEstudiantesAcceso = $estudiantesModulo['totalEstudiantesAcceso'];
+        $paginaEstudiantesAcceso = $estudiantesModulo['paginaEstudiantesAcceso'];
+        $totalPaginasEstudiantesAcceso = $estudiantesModulo['totalPaginasEstudiantesAcceso'];
+        $desdeEstudiantesAcceso = $estudiantesModulo['desdeEstudiantesAcceso'];
+        $hastaEstudiantesAcceso = $estudiantesModulo['hastaEstudiantesAcceso'];
+        $prevEstudiantesAccesoUrl = $estudiantesModulo['prevEstudiantesAccesoUrl'];
+        $nextEstudiantesAccesoUrl = $estudiantesModulo['nextEstudiantesAccesoUrl'];
+        $exportEstudiantesAccesoExcelUrl = $estudiantesModulo['exportEstudiantesAccesoExcelUrl'];
+        $exportEstudiantesAccesoPdfUrl = $estudiantesModulo['exportEstudiantesAccesoPdfUrl'];
         $createAdminAction = $adminsModulo['createAdminAction'];
         $admins = $adminsModulo['admins'] ?? [];
         $bulkUploadAction = $certificadosModulo['bulkUploadAction'];
@@ -641,6 +656,124 @@ class AdminController
         exit;
     }
 
+    public function adminExportEstudiantesUltimoAccesoExcel()
+    {
+        if (!$this->isAdminAuthenticated()) {
+            header('Location: ' . $this->url('/admin/login'));
+            exit;
+        }
+
+        @set_time_limit(0);
+
+        $becarioModel = new Becario($this->pdo);
+        $total = $becarioModel->contarTotalEstudiantes();
+
+        if (!class_exists('PhpOffice\\PhpSpreadsheet\\Spreadsheet') || !class_exists('PhpOffice\\PhpSpreadsheet\\Writer\\Xlsx')) {
+            $this->exportarEstudiantesAccesoCsvFallback($becarioModel, $total);
+            return;
+        }
+
+        $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle('Ultimo acceso');
+        $sheet->fromArray(['Cedula', 'Estudiante', 'Nivel', 'Ultimo acceso'], null, 'A1');
+
+        $filaExcel = 2;
+        $offset = 0;
+        $lote = 1000;
+
+        while ($offset < $total) {
+            $filas = $becarioModel->obtenerListadoEstudiantesUltimoAccesoPorLote($offset, $lote);
+            if (empty($filas)) {
+                break;
+            }
+
+            foreach ($filas as $fila) {
+                $nombres = trim((string) ($fila['nombres'] ?? ''));
+                $apellidos = trim((string) ($fila['apellidos'] ?? ''));
+                $nombreCompleto = trim($nombres . ' ' . $apellidos);
+                $nivel = trim((string) ($fila['nivel'] ?? ''));
+                $ultimoAcceso = $this->formatearFechaIngresoConDia((string) ($fila['fecha_ingreso_landing'] ?? ''));
+
+                $sheet->setCellValueExplicit('A' . $filaExcel, (string) ($fila['cedula'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $sheet->setCellValue('B' . $filaExcel, $nombreCompleto !== '' ? $nombreCompleto : 'Sin nombre');
+                $sheet->setCellValue('C' . $filaExcel, $nivel !== '' ? $nivel : '-');
+                $sheet->setCellValue('D' . $filaExcel, $ultimoAcceso !== '' ? $ultimoAcceso : '-');
+                $filaExcel++;
+            }
+
+            $offset += count($filas);
+        }
+
+        $filename = 'reporte_estudiantes_ultimo_acceso_todos_' . date('Ymd_His') . '.xlsx';
+        header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        header('Content-Disposition: attachment; filename="' . $filename . '"');
+        header('Cache-Control: max-age=0');
+        header('Pragma: public');
+
+        $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+        $writer->setPreCalculateFormulas(false);
+        $writer->save('php://output');
+        $spreadsheet->disconnectWorksheets();
+        unset($spreadsheet);
+        exit;
+    }
+
+    public function adminExportEstudiantesUltimoAccesoPdf()
+    {
+        if (!$this->isAdminAuthenticated()) {
+            header('Location: ' . $this->url('/admin/login'));
+            exit;
+        }
+
+        @set_time_limit(0);
+
+        $becarioModel = new Becario($this->pdo);
+        $total = $becarioModel->contarTotalEstudiantes();
+
+        $lineas = [];
+        $lineas[] = 'REPORTE DE ESTUDIANTES - ULTIMO ACCESO';
+        $lineas[] = 'Total de estudiantes: ' . $total;
+        $lineas[] = 'Generado: ' . date('d-m-Y H:i:s');
+        $lineas[] = str_repeat('-', 120);
+        $lineas[] = str_pad('Cedula', 14) . str_pad('Estudiante', 52) . str_pad('Nivel', 10) . 'Ultimo acceso';
+        $lineas[] = str_repeat('-', 120);
+
+        $offset = 0;
+        $lote = 1000;
+        while ($offset < $total) {
+            $filas = $becarioModel->obtenerListadoEstudiantesUltimoAccesoPorLote($offset, $lote);
+            if (empty($filas)) {
+                break;
+            }
+
+            foreach ($filas as $fila) {
+                $nombres = trim((string) ($fila['nombres'] ?? ''));
+                $apellidos = trim((string) ($fila['apellidos'] ?? ''));
+                $nombreCompleto = trim($nombres . ' ' . $apellidos);
+                $nivel = trim((string) ($fila['nivel'] ?? ''));
+                $ultimoAcceso = $this->formatearFechaIngresoConDia((string) ($fila['fecha_ingreso_landing'] ?? ''));
+
+                $lineas[] = str_pad(substr((string) ($fila['cedula'] ?? ''), 0, 13), 14)
+                    . str_pad(substr($nombreCompleto !== '' ? $nombreCompleto : 'Sin nombre', 0, 50), 52)
+                    . str_pad(substr($nivel !== '' ? $nivel : '-', 0, 8), 10)
+                    . ($ultimoAcceso !== '' ? $ultimoAcceso : '-');
+            }
+
+            $offset += count($filas);
+        }
+
+        $pdfBytes = $this->crearPdfTextoSimple($lineas);
+        $filename = 'reporte_estudiantes_ultimo_acceso_todos_' . date('Ymd_His') . '.pdf';
+
+        header('Content-Type: application/pdf');
+        header('Content-Disposition: attachment; filename="' . $filename . '"');
+        header('Content-Length: ' . strlen($pdfBytes));
+        header('X-Content-Type-Options: nosniff');
+        echo $pdfBytes;
+        exit;
+    }
+
     private function obtenerCedulasValidas(): array
     {
         try {
@@ -842,6 +975,44 @@ class AdminController
         $becarioModel = new Becario($this->pdo);
         $solicitudesReset = $becarioModel->obtenerSolicitudesResetPendientes($filtros, 80);
 
+        $paginaAccesos = max(1, (int) ($_GET['pagina_accesos'] ?? 1));
+        $porPaginaAccesos = 50;
+        $listadoAccesosPaginado = $becarioModel->obtenerListadoEstudiantesUltimoAccesoPaginado($paginaAccesos, $porPaginaAccesos);
+
+        $paginaAccesos = (int) ($listadoAccesosPaginado['pagina'] ?? 1);
+        $totalAccesos = (int) ($listadoAccesosPaginado['total'] ?? 0);
+        $totalPaginasAccesos = (int) ($listadoAccesosPaginado['totalPaginas'] ?? 1);
+        $listadoEstudiantesAcceso = $listadoAccesosPaginado['filas'] ?? [];
+
+        $paramsBase = ['tab' => 'estudiantes'];
+        if (!empty($filtros['fecha_desde'])) {
+            $paramsBase['fecha_desde'] = (string) $filtros['fecha_desde'];
+        }
+        if (!empty($filtros['fecha_hasta'])) {
+            $paramsBase['fecha_hasta'] = (string) $filtros['fecha_hasta'];
+        }
+        if (isset($filtros['solo_pendientes']) && (int) $filtros['solo_pendientes'] === 1) {
+            $paramsBase['solo_pendientes'] = '1';
+        }
+
+        $desdeAccesos = $totalAccesos > 0 ? (($paginaAccesos - 1) * $porPaginaAccesos + 1) : 0;
+        $hastaAccesos = $totalAccesos > 0 ? min($paginaAccesos * $porPaginaAccesos, $totalAccesos) : 0;
+
+        $prevUrl = '';
+        $nextUrl = '';
+
+        if ($paginaAccesos > 1) {
+            $paramsPrev = $paramsBase;
+            $paramsPrev['pagina_accesos'] = (string) ($paginaAccesos - 1);
+            $prevUrl = $this->url('/admin/dashboard?' . http_build_query($paramsPrev));
+        }
+
+        if ($paginaAccesos < $totalPaginasAccesos) {
+            $paramsNext = $paramsBase;
+            $paramsNext['pagina_accesos'] = (string) ($paginaAccesos + 1);
+            $nextUrl = $this->url('/admin/dashboard?' . http_build_query($paramsNext));
+        }
+
         return [
             'resetPasswordAction' => $this->url('/admin/reset-password'),
             'discardResetRequestAction' => $this->url('/admin/discard-reset-request'),
@@ -850,7 +1021,167 @@ class AdminController
             'filtroFechaDesde' => (string) ($filtros['fecha_desde'] ?? ''),
             'filtroFechaHasta' => (string) ($filtros['fecha_hasta'] ?? ''),
             'filtroSoloPendientes' => isset($filtros['solo_pendientes']) && (int) $filtros['solo_pendientes'] === 1,
+            'listadoEstudiantesAcceso' => $listadoEstudiantesAcceso,
+            'totalEstudiantesAcceso' => $totalAccesos,
+            'paginaEstudiantesAcceso' => $paginaAccesos,
+            'totalPaginasEstudiantesAcceso' => $totalPaginasAccesos,
+            'desdeEstudiantesAcceso' => $desdeAccesos,
+            'hastaEstudiantesAcceso' => $hastaAccesos,
+            'prevEstudiantesAccesoUrl' => $prevUrl,
+            'nextEstudiantesAccesoUrl' => $nextUrl,
+            'exportEstudiantesAccesoExcelUrl' => $this->url('/admin/export-estudiantes-ultimo-acceso-excel'),
+            'exportEstudiantesAccesoPdfUrl' => $this->url('/admin/export-estudiantes-ultimo-acceso-pdf'),
         ];
+    }
+
+    private function exportarEstudiantesAccesoCsvFallback(Becario $becarioModel, int $total): void
+    {
+        $filename = 'reporte_estudiantes_ultimo_acceso_todos_' . date('Ymd_His') . '.csv';
+        header('Content-Type: text/csv; charset=UTF-8');
+        header('Content-Disposition: attachment; filename="' . $filename . '"');
+        header('Pragma: no-cache');
+        header('Expires: 0');
+
+        $out = fopen('php://output', 'w');
+        if ($out === false) {
+            http_response_code(500);
+            echo 'No fue posible generar el archivo.';
+            return;
+        }
+
+        fwrite($out, "\xEF\xBB\xBF");
+        fputcsv($out, ['Cedula', 'Estudiante', 'Nivel', 'Ultimo acceso'], ';');
+
+        $offset = 0;
+        $lote = 1000;
+        while ($offset < $total) {
+            $filas = $becarioModel->obtenerListadoEstudiantesUltimoAccesoPorLote($offset, $lote);
+            if (empty($filas)) {
+                break;
+            }
+
+            foreach ($filas as $fila) {
+                $nombres = trim((string) ($fila['nombres'] ?? ''));
+                $apellidos = trim((string) ($fila['apellidos'] ?? ''));
+                $nombreCompleto = trim($nombres . ' ' . $apellidos);
+                $nivel = trim((string) ($fila['nivel'] ?? ''));
+                $ultimoAcceso = $this->formatearFechaIngresoConDia((string) ($fila['fecha_ingreso_landing'] ?? ''));
+
+                fputcsv($out, [
+                    (string) ($fila['cedula'] ?? ''),
+                    $nombreCompleto !== '' ? $nombreCompleto : 'Sin nombre',
+                    $nivel !== '' ? $nivel : '-',
+                    $ultimoAcceso !== '' ? $ultimoAcceso : '-',
+                ], ';');
+            }
+
+            $offset += count($filas);
+        }
+
+        fclose($out);
+        exit;
+    }
+
+    private function formatearFechaIngresoConDia(string $fechaRaw): string
+    {
+        $fechaRaw = trim($fechaRaw);
+        if ($fechaRaw === '') {
+            return '';
+        }
+
+        $ts = strtotime($fechaRaw);
+        if ($ts === false) {
+            return '';
+        }
+
+        $dias = ['Domingo', 'Lunes', 'Martes', 'Miercoles', 'Jueves', 'Viernes', 'Sabado'];
+        $dia = $dias[(int) date('w', $ts)] ?? '';
+        return trim($dia . ' ' . date('d-m-Y, H:i', $ts));
+    }
+
+    private function crearPdfTextoSimple(array $lineas): string
+    {
+        $porPagina = 45;
+        $chunks = array_chunk($lineas, $porPagina);
+
+        $objetos = [];
+        $idsPaginas = [];
+
+        $objetos[1] = '<< /Type /Catalog /Pages 2 0 R >>';
+        $objetos[3] = '<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>';
+
+        $nextId = 4;
+        foreach ($chunks as $chunk) {
+            $contenidoId = $nextId++;
+            $paginaId = $nextId++;
+
+            $idsPaginas[] = $paginaId;
+
+            $streamLines = [];
+            $streamLines[] = 'BT';
+            $streamLines[] = '/F1 10 Tf';
+            $streamLines[] = '14 TL';
+            $streamLines[] = '40 800 Td';
+
+            $first = true;
+            foreach ($chunk as $linea) {
+                $lineaIso = iconv('UTF-8', 'ISO-8859-1//TRANSLIT', (string) $linea);
+                if ($lineaIso === false) {
+                    $lineaIso = preg_replace('/[^\x20-\x7E]/', '?', (string) $linea);
+                }
+
+                if (!$first) {
+                    $streamLines[] = 'T*';
+                }
+                $first = false;
+
+                $streamLines[] = '(' . $this->escaparTextoPdf($lineaIso) . ') Tj';
+            }
+
+            $streamLines[] = 'ET';
+            $stream = implode("\n", $streamLines) . "\n";
+            $objetos[$contenidoId] = '<< /Length ' . strlen($stream) . ' >>' . "\nstream\n" . $stream . "endstream";
+            $objetos[$paginaId] = '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 842 595] /Resources << /Font << /F1 3 0 R >> >> /Contents ' . $contenidoId . ' 0 R >>';
+        }
+
+        $kids = '';
+        foreach ($idsPaginas as $idPagina) {
+            $kids .= $idPagina . ' 0 R ';
+        }
+        $objetos[2] = '<< /Type /Pages /Kids [' . trim($kids) . '] /Count ' . count($idsPaginas) . ' >>';
+
+        ksort($objetos);
+        $pdf = "%PDF-1.4\n";
+        $offsets = [0 => 0];
+
+        foreach ($objetos as $id => $content) {
+            $offsets[$id] = strlen($pdf);
+            $pdf .= $id . " 0 obj\n" . $content . "\nendobj\n";
+        }
+
+        $xrefPos = strlen($pdf);
+        $maxId = max(array_keys($objetos));
+        $pdf .= 'xref' . "\n";
+        $pdf .= '0 ' . ($maxId + 1) . "\n";
+        $pdf .= "0000000000 65535 f \n";
+
+        for ($i = 1; $i <= $maxId; $i++) {
+            $off = $offsets[$i] ?? 0;
+            $pdf .= sprintf('%010d 00000 n ', $off) . "\n";
+        }
+
+        $pdf .= 'trailer << /Size ' . ($maxId + 1) . ' /Root 1 0 R >>' . "\n";
+        $pdf .= 'startxref' . "\n" . $xrefPos . "\n%%EOF";
+
+        return $pdf;
+    }
+
+    private function escaparTextoPdf(string $texto): string
+    {
+        $texto = str_replace('\\', '\\\\', $texto);
+        $texto = str_replace('(', '\\(', $texto);
+        $texto = str_replace(')', '\\)', $texto);
+        return $texto;
     }
 
     private function obtenerFiltrosSolicitudesDesdeRequest(): array

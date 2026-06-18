@@ -133,6 +133,14 @@ switch ($uri) {
         $adminController->adminVerCertificado();
         break;
 
+    case '/admin/export-estudiantes-ultimo-acceso-excel':
+        $adminController->adminExportEstudiantesUltimoAccesoExcel();
+        break;
+
+    case '/admin/export-estudiantes-ultimo-acceso-pdf':
+        $adminController->adminExportEstudiantesUltimoAccesoPdf();
+        break;
+
     default:
         http_response_code(404);
         echo "404 - Página no encontrada";

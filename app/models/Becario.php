@@ -76,6 +76,22 @@ class Becario
     }
 
     /**
+     * Registra la fecha/hora del ultimo ingreso del becario a la landing.
+     * @param string $cedula La cedula del becario.
+     * @return bool True si la actualizacion fue exitosa, false si no.
+     */
+    public function registrarIngresoLanding($cedula)
+    {
+        try {
+            $stmt = $this->pdo->prepare("UPDATE usuarios SET fecha_ingreso_landing = NOW() WHERE cedula = ?");
+            return $stmt->execute([$cedula]);
+        } catch (PDOException $e) {
+            error_log("Error al registrar ingreso a landing: " . $e->getMessage());
+            return false;
+        }
+    }
+
+    /**
      * Actualiza la ciudad y provincia del becario y obtiene toda la información necesaria.
      * @param string $cedula La cédula del becario.
      * @param string $ciudad La nueva ciudad.
@@ -208,8 +224,8 @@ class Becario
 
             $whereSql = empty($where) ? '' : ('WHERE ' . implode(' AND ', $where));
 
-            $sql = "SELECT s.id, s.cedula, s.estado, s.solicitado_en, s.atendido_en,
-                           u.nombres, u.apellidos,
+                   $sql = "SELECT s.id, s.cedula, s.estado, s.solicitado_en, s.atendido_en,
+                         u.nombres, u.apellidos,
                            a.usuario AS atendido_por_usuario
                     FROM solicitudes_reset_contrasenia s
                     LEFT JOIN usuarios u ON u.cedula COLLATE utf8mb4_unicode_ci = s.cedula
@@ -240,6 +256,154 @@ class Becario
         } catch (PDOException $e) {
             error_log("Error al contar solicitudes pendientes de reseteo: " . $e->getMessage());
             return 0;
+        }
+    }
+
+    /**
+     * Obtiene el listado completo de estudiantes con su ultimo nivel y ultimo acceso.
+     * @return array
+     */
+    public function obtenerListadoEstudiantesUltimoAcceso()
+    {
+        try {
+            $sql = "SELECT
+                        u.cedula,
+                        u.nombres,
+                        u.apellidos,
+                        u.fecha_ingreso_landing,
+                        COALESCE((
+                            SELECT c.nivel
+                            FROM certificados c
+                            WHERE c.cedula COLLATE utf8mb4_unicode_ci = u.cedula COLLATE utf8mb4_unicode_ci
+                            ORDER BY c.fecha_subida DESC
+                            LIMIT 1
+                        ), '') AS nivel
+                    FROM usuarios u
+                    ORDER BY u.apellidos ASC, u.nombres ASC, u.cedula ASC";
+
+            $stmt = $this->pdo->query($sql);
+            return $stmt ? ($stmt->fetchAll(PDO::FETCH_ASSOC) ?: []) : [];
+        } catch (PDOException $e) {
+            error_log("Error al obtener listado de estudiantes con ultimo acceso: " . $e->getMessage());
+            return [];
+        }
+    }
+
+    /**
+     * Obtiene el listado de estudiantes con paginacion para mejorar rendimiento en panel admin.
+     * @param int $pagina
+     * @param int $porPagina
+     * @return array
+     */
+    public function obtenerListadoEstudiantesUltimoAccesoPaginado($pagina = 1, $porPagina = 50)
+    {
+        try {
+            $pagina = max(1, (int) $pagina);
+            $porPagina = max(10, min(200, (int) $porPagina));
+
+            $stmtTotal = $this->pdo->query("SELECT COUNT(*) AS total FROM usuarios");
+            $rowTotal = $stmtTotal ? $stmtTotal->fetch(PDO::FETCH_ASSOC) : null;
+            $total = (int) ($rowTotal['total'] ?? 0);
+
+            $totalPaginas = $total > 0 ? (int) ceil($total / $porPagina) : 1;
+            $pagina = min($pagina, $totalPaginas);
+            $offset = ($pagina - 1) * $porPagina;
+
+            $sql = "SELECT
+                        u.cedula,
+                        u.nombres,
+                        u.apellidos,
+                        u.fecha_ingreso_landing,
+                        COALESCE((
+                            SELECT c.nivel
+                            FROM certificados c
+                            WHERE c.cedula COLLATE utf8mb4_unicode_ci = u.cedula COLLATE utf8mb4_unicode_ci
+                            ORDER BY c.fecha_subida DESC
+                            LIMIT 1
+                        ), '') AS nivel
+                    FROM usuarios u
+                    ORDER BY u.apellidos ASC, u.nombres ASC, u.cedula ASC
+                    LIMIT :limite OFFSET :offset";
+
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->bindValue(':limite', $porPagina, PDO::PARAM_INT);
+            $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+            $stmt->execute();
+
+            $filas = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+            return [
+                'total' => $total,
+                'pagina' => $pagina,
+                'porPagina' => $porPagina,
+                'totalPaginas' => $totalPaginas,
+                'filas' => $filas,
+            ];
+        } catch (PDOException $e) {
+            error_log("Error al obtener listado paginado de estudiantes con ultimo acceso: " . $e->getMessage());
+            return [
+                'total' => 0,
+                'pagina' => 1,
+                'porPagina' => 50,
+                'totalPaginas' => 1,
+                'filas' => [],
+            ];
+        }
+    }
+
+    /**
+     * Cuenta total de estudiantes para exportaciones masivas.
+     * @return int
+     */
+    public function contarTotalEstudiantes()
+    {
+        try {
+            $stmt = $this->pdo->query("SELECT COUNT(*) AS total FROM usuarios");
+            $row = $stmt ? $stmt->fetch(PDO::FETCH_ASSOC) : null;
+            return (int) ($row['total'] ?? 0);
+        } catch (PDOException $e) {
+            error_log("Error al contar estudiantes: " . $e->getMessage());
+            return 0;
+        }
+    }
+
+    /**
+     * Obtiene un lote del listado completo para exportaciones grandes.
+     * @param int $offset
+     * @param int $limite
+     * @return array
+     */
+    public function obtenerListadoEstudiantesUltimoAccesoPorLote($offset = 0, $limite = 1000)
+    {
+        try {
+            $offset = max(0, (int) $offset);
+            $limite = max(1, min(5000, (int) $limite));
+
+            $sql = "SELECT
+                        u.cedula,
+                        u.nombres,
+                        u.apellidos,
+                        u.fecha_ingreso_landing,
+                        COALESCE((
+                            SELECT c.nivel
+                            FROM certificados c
+                            WHERE c.cedula COLLATE utf8mb4_unicode_ci = u.cedula COLLATE utf8mb4_unicode_ci
+                            ORDER BY c.fecha_subida DESC
+                            LIMIT 1
+                        ), '') AS nivel
+                    FROM usuarios u
+                    ORDER BY u.apellidos ASC, u.nombres ASC, u.cedula ASC
+                    LIMIT :limite OFFSET :offset";
+
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->bindValue(':limite', $limite, PDO::PARAM_INT);
+            $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+            $stmt->execute();
+
+            return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        } catch (PDOException $e) {
+            error_log("Error al obtener lote de estudiantes con ultimo acceso: " . $e->getMessage());
+            return [];
         }
     }
 

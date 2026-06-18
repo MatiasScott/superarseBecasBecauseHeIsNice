@@ -129,6 +129,109 @@
         <?php endif; ?>
     </div>
 
+    <div class="rounded-xl border border-gray-200 bg-white p-4 space-y-3">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+            <div>
+                <h3 class="text-lg font-bold text-gray-800">Listado completo de estudiantes - Ultimo acceso</h3>
+                <p class="text-sm text-gray-600">Muestra cedula, nombre, nivel y la ultima fecha/hora de ingreso a la landing.</p>
+            </div>
+            <div class="flex flex-wrap gap-2">
+                <a href="<?= h($exportEstudiantesAccesoExcelUrl ?? '#') ?>"
+                    class="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm py-2 px-4 rounded-lg">
+                    <i class="bi bi-file-earmark-excel"></i>
+                    Exportar Excel (todos)
+                </a>
+                <a href="<?= h($exportEstudiantesAccesoPdfUrl ?? '#') ?>"
+                    class="inline-flex items-center gap-2 bg-rose-600 hover:bg-rose-700 text-white font-semibold text-sm py-2 px-4 rounded-lg">
+                    <i class="bi bi-file-earmark-pdf"></i>
+                    Exportar PDF (todos)
+                </a>
+            </div>
+        </div>
+
+        <?php if (!empty($listadoEstudiantesAcceso)) : ?>
+            <div class="overflow-x-auto rounded-lg border border-gray-200">
+                <table class="min-w-full text-sm">
+                    <thead class="bg-gray-50 text-left text-gray-500">
+                        <tr>
+                            <th class="py-2 px-3">Cedula</th>
+                            <th class="py-2 px-3">Estudiante</th>
+                            <th class="py-2 px-3">Nivel</th>
+                            <th class="py-2 px-3">Ultimo acceso</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($listadoEstudiantesAcceso as $filaAcceso) : ?>
+                            <?php
+                            $nombresAcceso = trim((string) ($filaAcceso['nombres'] ?? ''));
+                            $apellidosAcceso = trim((string) ($filaAcceso['apellidos'] ?? ''));
+                            $nombreCompletoAcceso = trim($nombresAcceso . ' ' . $apellidosAcceso);
+                            $nivelAcceso = trim((string) ($filaAcceso['nivel'] ?? ''));
+                            $ingresoRaw = trim((string) ($filaAcceso['fecha_ingreso_landing'] ?? ''));
+                            $ingresoFmt = '-';
+                            if ($ingresoRaw !== '') {
+                                $tsIngreso = strtotime($ingresoRaw);
+                                if ($tsIngreso !== false) {
+                                    $dias = ['Domingo', 'Lunes', 'Martes', 'Miercoles', 'Jueves', 'Viernes', 'Sabado'];
+                                    $dia = $dias[(int) date('w', $tsIngreso)] ?? '';
+                                    $ingresoFmt = trim($dia . ' ' . date('d-m-Y, H:i', $tsIngreso));
+                                }
+                            }
+                            ?>
+                            <tr class="border-t border-gray-100">
+                                <td class="py-2 px-3 font-mono font-semibold text-gray-700"><?= h($filaAcceso['cedula'] ?? '') ?></td>
+                                <td class="py-2 px-3 text-gray-700"><?= h($nombreCompletoAcceso !== '' ? $nombreCompletoAcceso : 'Sin nombre') ?></td>
+                                <td class="py-2 px-3">
+                                    <span class="inline-block text-xs font-semibold px-2 py-1 rounded-full bg-blue-100 text-blue-700">
+                                        <?= h($nivelAcceso !== '' ? $nivelAcceso : '-') ?>
+                                    </span>
+                                </td>
+                                <td class="py-2 px-3 text-gray-600"><?= h($ingresoFmt) ?></td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="flex flex-wrap items-center justify-between gap-3 pt-2">
+                <p class="text-xs text-gray-600">
+                    Mostrando <?= (int) ($desdeEstudiantesAcceso ?? 0) ?> - <?= (int) ($hastaEstudiantesAcceso ?? 0) ?>
+                    de <?= (int) ($totalEstudiantesAcceso ?? 0) ?> estudiantes
+                    (página <?= (int) ($paginaEstudiantesAcceso ?? 1) ?> de <?= (int) ($totalPaginasEstudiantesAcceso ?? 1) ?>)
+                </p>
+                <div class="flex items-center gap-2">
+                    <?php if (!empty($prevEstudiantesAccesoUrl)) : ?>
+                        <a href="<?= h($prevEstudiantesAccesoUrl) ?>"
+                            class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-gray-300 text-sm text-gray-700 hover:bg-gray-100">
+                            <i class="bi bi-chevron-left"></i>
+                            Anterior
+                        </a>
+                    <?php else : ?>
+                        <span class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-gray-200 text-sm text-gray-400 cursor-not-allowed">
+                            <i class="bi bi-chevron-left"></i>
+                            Anterior
+                        </span>
+                    <?php endif; ?>
+
+                    <?php if (!empty($nextEstudiantesAccesoUrl)) : ?>
+                        <a href="<?= h($nextEstudiantesAccesoUrl) ?>"
+                            class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-gray-300 text-sm text-gray-700 hover:bg-gray-100">
+                            Siguiente
+                            <i class="bi bi-chevron-right"></i>
+                        </a>
+                    <?php else : ?>
+                        <span class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-gray-200 text-sm text-gray-400 cursor-not-allowed">
+                            Siguiente
+                            <i class="bi bi-chevron-right"></i>
+                        </span>
+                    <?php endif; ?>
+                </div>
+            </div>
+        <?php else : ?>
+            <p class="text-sm text-gray-600">No hay estudiantes registrados para mostrar.</p>
+        <?php endif; ?>
+    </div>
+
     <div class="border-t border-gray-100 pt-4">
         <h3 class="text-lg font-bold text-gray-800 mb-2">Reseteo manual por cedula</h3>
         <p class="text-sm text-gray-600 mb-3">Tambien puedes resetear manualmente si no existe solicitud registrada.</p>
