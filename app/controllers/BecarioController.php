@@ -49,6 +49,12 @@ class BecarioController
             exit;
         }
 
+        if (!$this->isStudentAccountActive($registro)) {
+            session_unset();
+            header('Location: ' . $this->url('/'));
+            exit;
+        }
+
         $this->renderPanel($registro);
     }
 
@@ -104,12 +110,16 @@ class BecarioController
                 $becarioData = $becarioModel->buscarPorCedula($cedula);
 
                 if ($becarioData) {
-                    $ok = $becarioModel->crearSolicitudResetContrasenia($cedula);
-                    if ($ok) {
-                        $messageType = 'success';
-                        $message = 'Solicitud recibida. Un administrador puede resetear tu contrasena desde el panel administrativo.';
+                    if (!$this->isStudentAccountActive($becarioData)) {
+                        $message = 'Tu cuenta se encuentra inactiva. Contacta a administracion.';
                     } else {
-                        $message = 'No pudimos registrar la solicitud en este momento. Intenta nuevamente.';
+                        $ok = $becarioModel->crearSolicitudResetContrasenia($cedula);
+                        if ($ok) {
+                            $messageType = 'success';
+                            $message = 'Solicitud recibida. Un administrador puede resetear tu contrasena desde el panel administrativo.';
+                        } else {
+                            $message = 'No pudimos registrar la solicitud en este momento. Intenta nuevamente.';
+                        }
                     }
                 } else {
                     $message = 'No encontramos esa cédula. Verifica el dato e intenta nuevamente.';
@@ -180,6 +190,12 @@ class BecarioController
         if (!$becarioData) {
             $this->registerLoginFailure($cedula);
             echo json_encode(['success' => false, 'error' => 'Cédula o contraseña incorrecta.']);
+            return;
+        }
+
+        if (!$this->isStudentAccountActive($becarioData)) {
+            $this->registerLoginFailure($cedula);
+            echo json_encode(['success' => false, 'error' => 'Tu cuenta se encuentra inactiva. Contacta a administracion.']);
             return;
         }
 
@@ -502,6 +518,16 @@ class BecarioController
         if (isset($_SESSION['login_attempts'][$key])) {
             unset($_SESSION['login_attempts'][$key]);
         }
+    }
+
+    private function isStudentAccountActive(array $becarioData): bool
+    {
+        if (!array_key_exists('activo', $becarioData)) {
+            // Compatibilidad: si la columna aun no existe, no bloquear accesos.
+            return true;
+        }
+
+        return (int) $becarioData['activo'] === 1;
     }
 
     private function ensureLoginPassword(Becario $becarioModel, array &$becarioData, string $cedula): bool
